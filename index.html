@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Greeling - Sustainable Urban Systems</title>
+    <style>
+        /* Variáveis CSS para o tema Eco-Friendly */
+        :root {
+            --primary-green: #2ecc71;
+            --dark-green: #27ae60;
+            --bg-color: #f4f9f5;
+            --text-dark: #2c3e50;
+            --text-light: #ecf0f1;
+            --card-bg: #ffffff;
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-dark);
+            line-height: 1.6;
+        }
+
+        /* Navegação */
+        header {
+            background-color: var(--card-bg);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+        }
+
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 5%;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .logo {
+            width: 90px;
+            height: 60px;
+            color: var(--dark-green);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-links {
+            list-style: none;
+            display: flex;
+            gap: 2rem;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--text-dark);
+            font-weight: 600;
+            transition: var(--transition);
+        }
+
+        .nav-links a:hover {
+            color: var(--primary-green);
+        }
+
+        /* Hero Section */
+        .hero {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            background: linear-gradient(rgba(44, 62, 80, 0.8), rgba(39, 174, 96, 0.8)), url('https://images.unsplash.com/photo-1473448912268-2022ce9509d8?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80') center/cover;
+            color: var(--text-light);
+            padding: 0 20px;
+            margin-top: 60px;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            max-width: 600px;
+            margin-bottom: 2rem;
+        }
+
+        .btn {
+            padding: 10px 25px;
+            background-color: var(--primary-green);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            text-decoration: none;
+            transition: var(--transition);
+            font-weight: bold;
+        }
+
+        .btn:hover {
+            background-color: var(--dark-green);
+            transform: translateY(-2px);
+        }
+
+        /* Secções Gerais */
+        section {
+            padding: 5rem 5%;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            color: var(--dark-green);
+            margin-bottom: 3rem;
+        }
+
+        /* Soluções (Cards) */
+        .solutions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+            transition: var(--transition);
+            border-bottom: 4px solid var(--primary-green);
+        }
+
+        .card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+
+        .card h3 {
+            color: var(--dark-green);
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+
+        .card ul {
+            list-style-type: none;
+            margin-top: 1rem;
+        }
+
+        .card ul li {
+            margin-bottom: 0.5rem;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .card ul li::before {
+            content: '✓';
+            color: var(--primary-green);
+            position: absolute;
+            left: 0;
+            font-weight: bold;
+        }
+
+        /* Missão e Impacto */
+        .mission-content {
+            display: flex;
+            gap: 4rem;
+            align-items: center;
+            background: white;
+            padding: 3rem;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+        }
+
+        .mission-text {
+            flex: 1;
+        }
+
+        .stats {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .stat-box {
+            background: var(--bg-color);
+            padding: 1.5rem;
+            border-left: 5px solid var(--primary-green);
+            border-radius: 0 10px 10px 0;
+        }
+
+        /* Equipa */
+        .team-section {
+            text-align: center;
+        }
+
+        /* Footer */
+        footer {
+            background-color: var(--text-dark);
+            color: var(--text-light);
+            text-align: center;
+            padding: 2rem 5%;
+        }
+
+        /* Responsividade */
+        @media (max-width: 768px) {
+            .nav-links { display: none; } /* Pode ser substituído por um menu hambúrguer */
+            .hero h1 { font-size: 2.5rem; }
+            .mission-content { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Cabeçalho -->
+    <header>
+        <nav>
+            <img src="logo.png" class="logo">
+            <ul class="nav-links">
+                <li><a href="#inicio">Início</a></li>
+                <li><a href="#missao">Missão</a></li>
+                <li><a href="#solucoes">Soluções</a></li>
+                <li><a href="#contacto">Contacto</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <section id="inicio" class="hero">
+        <h1>O Futuro é Verde e Conectado</h1>
+        <p>Transforme a sua cidade com soluções integradas de mobilidade elétrica, energia renovável e infraestrutura verde.</p>
+        <a href="#solucoes" class="btn">Explorar Soluções</a>
+    </section>
+
+    <!-- Missão e Impacto -->
+    <section id="missao">
+        <h2 class="section-title">A Nossa Missão</h2>
+        <div class="mission-content">
+            <div class="mission-text">
+                <h3>Construir a Cidade Sustentável</h3>
+                <p>A nossa missão é criar uma cidade futurista e inteligente onde a tecnologia melhora a qualidade de vida e protege o ambiente. Combatemos problemas como as altas emissões de CO2, o desperdício de energia e a falta de espaços verdes urbanos.</p>
+                <br>
+                <p>Alinhados com os ODS das Nações Unidas:</p>
+                <ul>
+                    <li><strong>ODS 7:</strong> Energia Acessível e Limpa</li>
+                    <li><strong>ODS 11:</strong> Cidades e Comunidades Sustentáveis</li>
+                    <li><strong>ODS 13:</strong> Ação Climática</li>
+                </ul>
+            </div>
+            <div class="stats">
+                <div class="stat-box">
+                    <h3 style="color: var(--dark-green); font-size: 2rem;">40%</h3>
+                    <p>Das construções sustentáveis realizadas no nosso mercado atual.</p>
+                </div>
+                <div class="stat-box">
+                    <h3 style="color: var(--dark-green);">Zero Emissões</h3>
+                    <p>Infraestruturas autónomas alimentadas por energia solar integrada.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Soluções -->
+    <section id="solucoes">
+        <h2 class="section-title">Infraestruturas Inteligentes</h2>
+        <div class="solutions-grid">
+            
+            <!-- Paragens -->
+            <div class="card">
+                <h3>Paragens Inteligentes</h3>
+                <p>Abrigos de autocarro vivos que geram a própria energia e melhoram o conforto dos passageiros.</p>
+                <ul>
+                    <li>Painéis solares e iluminação LED com sensores de movimento</li>
+                    <li>Ecrãs com estado de ocupação e qualidade do ar em tempo real</li>
+                    <li>Jardins verticais com rega automática por água da chuva</li>
+                    <li>Portas USB protegidas para carregamento de dispositivos</li>
+                </ul>
+            </div>
+
+            <!-- Ciclovias -->
+            <div class="card">
+                <h3>Ciclovias Dinâmicas</h3>
+                <p>Rotas ativas que promovem a mobilidade suave com tecnologia embebida no pavimento.</p>
+                <ul>
+                    <li>Pavimento gerador de energia (fotovoltaico)</li>
+                    <li>Faixas LED direcionais ativadas por aproximação</li>
+                    <li>Contadores inteligentes de ciclistas</li>
+                    <li>Estações solares com bombas de ar e ferramentas</li>
+                </ul>
+            </div>
+
+            <!-- Parques -->
+            <div class="card">
+                <h3>Parques Sustentáveis</h3>
+                <p>Espaços de lazer que promovem a biodiversidade e gerem os recursos hídricos da cidade.</p>
+                <ul>
+                    <li>Bancos solares com carregamento indutivo</li>
+                    <li>Jardins de chuva para drenagem natural e prevenção de cheias</li>
+                    <li>Lagos fito-depurados autossustentáveis</li>
+                    <li>Corredores de polinizadores e hotéis de insetos</li>
+                </ul>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- Liderança -->
+    <section class="team-section">
+        <h2 class="section-title">Liderança</h2>
+        <p><strong>Gabriel</strong> - Fundador & CEO da Greeling</p>
+        <p>Unimos engenharia avançada e design sustentável para construir a espinha dorsal das cidades do futuro.</p>
+    </section>
+
+    <!-- Footer / Contacto -->
+    <footer id="contacto">
+        <h2>Construa Cidades Sustentáveis com a Greeling</h2>
+        <p style="margin: 1rem 0;">Transformamos conceitos complexos em mobiliário urbano real e duradouro.</p>
+        <p>Solicite um estudo: <strong>info@greeling.com</strong></p>
+        <br>
+        <p><small>&copy; 2026 Greeling - Sustainable Urban Systems. Integrated Green Infrastructure.</small></p>
+    </footer>
+
+    <script>
+        // Smooth scrolling para os links da navegação
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+
+        // Efeito simples na Navbar ao fazer scroll
+        window.addEventListener('scroll', () => {
+            const header = document.querySelector('header');
+            if (window.scrollY > 50) {
+                header.style.boxShadow = '0 4px 15px rgba(0,0,0,0.1)';
+            } else {
+                header.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+            }
+        });
+    </script>
+</body>
+</html>

@@ -55,6 +55,7 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            object-fit: contain; /* Garante que o logo não distorce */
         }
 
         .nav-links {
@@ -145,11 +146,23 @@
             box-shadow: 0 5px 15px rgba(0,0,0,0.05);
             transition: var(--transition);
             border-bottom: 4px solid var(--primary-green);
+            display: flex;
+            flex-direction: column;
         }
 
         .card:hover {
             transform: translateY(-10px);
             box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+
+        /* Estilo específico para as imagens dentro dos cards */
+        .card-img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover; /* Faz com que a imagem preencha o espaço sem distorcer */
+            border-radius: 10px;
+            margin-bottom: 1.5rem;
+            background-color: #e0e0e0; /* Cor de fundo caso a imagem demore a carregar */
         }
 
         .card h3 {
@@ -161,6 +174,7 @@
         .card ul {
             list-style-type: none;
             margin-top: 1rem;
+            flex-grow: 1; /* Empurra o conteúdo para preencher o espaço */
         }
 
         .card ul li {
@@ -221,7 +235,7 @@
 
         /* Responsividade */
         @media (max-width: 768px) {
-            .nav-links { display: none; } /* Pode ser substituído por um menu hambúrguer */
+            .nav-links { display: none; }
             .hero h1 { font-size: 2.5rem; }
             .mission-content { flex-direction: column; }
         }
@@ -232,7 +246,7 @@
     <!-- Cabeçalho -->
     <header>
         <nav>
-            <img src="logo.png" class="logo">
+            <img src="logo.png" class="logo" alt="Logótipo Greeling">
             <ul class="nav-links">
                 <li><a href="#inicio">Início</a></li>
                 <li><a href="#missao">Missão</a></li>
@@ -276,7 +290,7 @@
             </div>
         </div>
     </section>
-
+    
     <!-- Soluções -->
     <section id="solucoes">
         <h2 class="section-title">Infraestruturas Inteligentes</h2>
@@ -284,6 +298,9 @@
             
             <!-- Paragens -->
             <div class="card">
+                <!-- Adiciona aqui o caminho para a tua imagem das paragens -->
+                <img src="image (4).png" alt="Paragens Inteligentes" class="card-img">
+                
                 <h3>Paragens Inteligentes</h3>
                 <p>Abrigos de autocarro vivos que geram a própria energia e melhoram o conforto dos passageiros.</p>
                 <ul>
@@ -296,6 +313,9 @@
 
             <!-- Ciclovias -->
             <div class="card">
+                <!-- Adiciona aqui o caminho para a tua imagem das ciclovias -->
+                <img src="ciclovia.png" alt="Ciclovias Dinâmicas" class="card-img">
+
                 <h3>Ciclovias Dinâmicas</h3>
                 <p>Rotas ativas que promovem a mobilidade suave com tecnologia embebida no pavimento.</p>
                 <ul>
@@ -308,6 +328,9 @@
 
             <!-- Parques -->
             <div class="card">
+                <!-- Adiciona aqui o caminho para a tua imagem dos parques -->
+                <img src="parque.png" alt="Parques Sustentáveis" class="card-img">
+
                 <h3>Parques Sustentáveis</h3>
                 <p>Espaços de lazer que promovem a biodiversidade e gerem os recursos hídricos da cidade.</p>
                 <ul>
@@ -332,31 +355,4 @@
     <footer id="contacto">
         <h2>Construa Cidades Sustentáveis com a Greeling</h2>
         <p style="margin: 1rem 0;">Transformamos conceitos complexos em mobiliário urbano real e duradouro.</p>
-        <p>Solicite um estudo: <strong>info@greeling.com</strong></p>
-        <br>
-        <p><small>&copy; 2026 Greeling - Sustainable Urban Systems. Integrated Green Infrastructure.</small></p>
-    </footer>
-
-    <script>
-        // Smooth scrolling para os links da navegação
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
-                e.preventDefault();
-                document.querySelector(this.getAttribute('href')).scrollIntoView({
-                    behavior: 'smooth'
-                });
-            });
-        });
-
-        // Efeito simples na Navbar ao fazer scroll
-        window.addEventListener('scroll', () => {
-            const header = document.querySelector('header');
-            if (window.scrollY > 50) {
-                header.style.boxShadow = '0 4px 15px rgba(0,0,0,0.1)';
-            } else {
-                header.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
-            }
-        });
-    </script>
-</body>
-</html>
+        <p>Solicite um estudo:

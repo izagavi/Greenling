@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Greeling - Simulador de Cidade Inteligente</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background-color: #020617; /* bg-slate-950 */
+            color: #f8fafc;
+            user-select: none;
+        }
+
+        #sim-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none; /* Let clicks pass through to canvas if needed, though we just track mouse */
+        }
+
+        .pointer-events-auto {
+            pointer-events: auto;
+        }
+
+        /* Tech Glassmorphism Panels */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Animations for Floating UIs */
+        .ui-anchor {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            transition: left 0.1s linear, top 0.1s linear;
+        }
+        
+        .fade-hide {
+            opacity: 0;
+            transform: translate(-50%, -90%) scale(0.95);
+            visibility: hidden;
+        }
+        
+        .fade-show {
+            opacity: 1;
+            transform: translate(-50%, -100%) scale(1);
+            visibility: visible;
+        }
+
+        /* Progress Bar Animation */
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+            50% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.8); }
+        }
+        .progress-bar-glow {
+            animation: pulse-glow 2s infinite;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Canvas para Renderização 2D -->
+    <canvas id="sim-canvas"></canvas>
+
+    <!-- Camada de Interface de Utilizador -->
+    <div id="ui-layer">
+        
+        <!-- Header Global (Top Left & Right) -->
+        <div class="absolute top-6 left-6 right-6 flex justify-between items-start pointer-events-none">
+            
+            <!-- Dashboard Inteligente (Ciclovia & Qualidade do Ar) -->
+            <div class="glass-panel rounded-2xl p-5 w-80 flex flex-col gap-4 pointer-events-auto">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-emerald-400 bg-emerald-500 flex items-center justify-center text-white text-xl shadow-lg shadow-emerald-500/30">
+                        G
+                    </div>
+                    <div>
+                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Greeling Dashboard</h2>
+                        <div class="text-sm font-semibold flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                            Dados Câmara Municipal
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3 border-t border-slate-700/50 pt-3">
+                    <div>
+                        <p class="text-[10px] text-slate-400 uppercase">Ciclistas Hoje</p>
+                        <p class="text-xl font-bold font-mono text-white" id="bike-today">1,489</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] text-slate-400 uppercase">Total Anual</p>
+                        <p class="text-xl font-bold font-mono text-emerald-400" id="bike-total">40,125</p>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50 flex justify-between items-center">
+                    <div>
+                        <p class="text-xs font-bold text-white flex items-center gap-1">⛅ Temp: 28ºC</p>
+                        <p class="text-[10px] text-emerald-400 mt-0.5">Recomendação: Ar Puro</p>
+                    </div>
+                    <span class="text-2xl">🍃</span>
+                </div>
+            </div>
+
+            <!-- Theme Toggle -->
+            <button id="theme-btn" class="glass-panel rounded-full px-6 py-3 font-bold flex items-center gap-3 pointer-events-auto hover:bg-slate-800/80 active:scale-95 transition-all shadow-lg text-sm tracking-wide">
+                <span id="theme-icon" class="text-lg">🌙</span> 
+                <span id="theme-text">Modo Noite</span>
+            </button>
+        </div>
+
+        <!-- 1. UI Paragem Inteligente -->
+        <div id="ui-bus" class="ui-anchor glass-panel rounded-2xl p-4 w-72 fade-hide">
+            <div class="flex items-center gap-2 mb-3">
+                <span class="text-xl">🚏</span>
+                <div>
+                    <h3 class="font-bold text-sm text-white">L7/A11 | SMART ENERGY</h3>
+                    <p class="text-[10px] text-emerald-400">Paragem Autossustentável</p>
+                </div>
+            </div>
+            
+            <div class="space-y-3 mb-3">
+                <!-- Bus L4 -->
+                <div class="bg-slate-800/60 p-2 rounded-lg border border-slate-700/50">
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="font-bold text-emerald-300">Autocarro L4</span>
+                        <span class="font-mono font-bold text-white">2 Min</span>
+                    </div>
+                    <div class="w-full bg-slate-900 rounded-full h-1.5 mb-1 overflow-hidden">
+                        <div class="bg-emerald-400 h-full w-[30%]"></div>
+                    </div>
+                    <p class="text-[9px] text-slate-400 text-right">Ocupação: 30% (Livre)</p>
+                </div>
+                <!-- Bus L27 -->
+                <div class="bg-slate-800/60 p-2 rounded-lg border border-slate-700/50">
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="font-bold text-yellow-400">Autocarro L27</span>
+                        <span class="font-mono font-bold text-white">8 Min</span>
+                    </div>
+                    <div class="w-full bg-slate-900 rounded-full h-1.5 mb-1 overflow-hidden">
+                        <div class="bg-yellow-400 h-full w-[85%]"></div>
+                    </div>
+                    <p class="text-[9px] text-slate-400 text-right">Ocupação: 85% (Cheio)</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 border-t border-slate-700/50 pt-3 text-[10px]">
+                <div>
+                    <p class="text-slate-400 mb-1">Portas USB-C (60W)</p>
+                    <div class="flex gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500"></span><span class="w-2 h-2 rounded-full bg-emerald-500"></span></div>
+                </div>
+                <div>
+                    <p class="text-slate-400 mb-1">Água da Chuva</p>
+                    <p class="font-bold text-blue-400">Reservatório: 78%</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. UI Lago (Parque) -->
+        <div id="ui-lake" class="ui-anchor glass-panel rounded-2xl p-4 w-64 fade-hide">
+            <h3 class="font-bold text-sm text-blue-400 mb-1 flex items-center gap-2">💧 Lago Autossustentável</h3>
+            <p class="text-xs text-slate-300 leading-relaxed">
+                Sistema de fito-depuração natural e gestão de águas pluviais integrado na paisagem urbana.
+            </p>
+            <div class="mt-3 flex gap-2">
+                <span class="px-2 py-1 bg-blue-500/20 text-blue-300 text-[9px] font-bold rounded-md">ODS 6</span>
+                <span class="px-2 py-1 bg-amber-500/20 text-amber-300 text-[9px] font-bold rounded-md">ODS 11</span>
+            </div>
+        </div>
+
+        <!-- 3. UI Banco Solar -->
+        <div id="ui-bench" class="ui-anchor glass-panel rounded-full px-5 py-3 fade-hide flex items-center gap-3">
+            <div class="bg-blue-500/20 p-2 rounded-full border border-blue-500/30">
+                <span class="text-blue-400 block animate-pulse">⚡</span>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-white uppercase tracking-wider">Banco Solar</p>
+                <p class="text-[10px] text-blue-300 font-medium">Carregamento Indutivo Ativo</p>
+            </div>
+        </div>
+
+        <!-- 4. UI Insetos -->
+        <div id="ui-insects" class="ui-anchor glass-panel rounded-2xl p-4 w-64 fade-hide">
+            <h3 class="font-bold text-sm text-amber-400 mb-1 flex items-center gap-2">🐝 Hotel de Insetos</h3>
+            <p class="text-xs text-slate-300 leading-relaxed mb-2">
+                Corredor de Polinizadores. Promove a biodiversidade local e protege a fauna nativa.
+            </p>
+            <span class="inline-block px-2 py-1 bg-emerald-500/20 text-emerald-300 text-[9px] font-bold rounded-md">ODS 15.1</span>
+        </div>
+
+    </div>
+
+    <!-- Script Principal da Simulação -->
+    <script>
+        const canvas = document.getElementById('sim-canvas');
+        const ctx = canvas.getContext('2d', { alpha: false }); // Otimização
+
+        // UI Elements
+        const uiBus = document.getElementById('ui-bus');
+        const uiLake = document.getElementById('ui-lake');
+        const uiBench = document.getElementById('ui-bench');
+        const uiInsects = document.getElementById('ui-insects');
+        const bikeTodayEl = document.getElementById('bike-today');
+        const bikeTotalEl = document.getElementById('bike-total');
+        
+        const themeBtn = document.getElementById('theme-btn');
+        const themeIcon = document.getElementById('theme-icon');
+        const themeText = document.getElementById('theme-text');
+
+        // Estado Global
+        let width, height;
+        let isNight = true;
+        let nightTransition = 1.0; // 0 = Day, 1 = Night
+        let bikeTodayCount = 1489;
+        let bikeTotalCount = 40125;
+        let playerOnPath = false;
+
+        // Entidade Jogador
+        const player = {
+            x: -100, y: -100,
+            targetX: window.innerWidth / 2, targetY: window.innerHeight / 2,
+            radius: 12, speed: 0.08
+        };
+
+        // Zonas de Interação
+        const zones = {
+            bus: { x: 0, y: 0, w: 200, h: 120, rad: 160 },
+            path: { y: 0, h: 100 },
+            lake: { x: 0, y: 0, rad: 180 },
+            bench: { x: 0, y: 0, w: 80, h: 30, rad: 100 },
+            insects: { x: 0, y: 0, w: 50, h: 50, rad: 120 }
+        };
+
+        // Cores (Paleta Diurna e Noturna)
+        const colors = {
+            day: {
+                bg: '#f1f5f9', grass: '#bbf7d0', path: '#cbd5e1', pathPanel: '#94a3b8',
+                water: '#38bdf8', wood: '#b45309', concrete: '#e2e8f0', greenRoof: '#22c55e'
+            },
+            night: {
+                bg: '#0f172a', grass: '#064e3b', path: '#1e293b', pathPanel: '#0f172a',
+                water: '#0369a1', wood: '#451a03', concrete: '#334155', greenRoof: '#065f46'
+            }
+        };
+
+        // Redimensionamento
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            if (player.x === -100) {
+                player.x = width / 2;
+                player.y = height / 2;
+            }
+            updateZones();
+        }
+        window.addEventListener('resize', resize);
+
+        function updateZones() {
+            // Paragem: Topo Esquerdo
+            zones.bus.x = width * 0.25;
+            zones.bus.y = height * 0.35;
+            
+            // Ciclovia: Faixa Inferior
+            zones.path.y = height * 0.8;
+            
+            // Parque: Lado Direito
+            zones.lake.x = width * 0.7;
+            zones.lake.y = height * 0.3;
+            
+            zones.bench.x = width * 0.85;
+            zones.bench.y = height * 0.45;
+            
+            zones.insects.x = width * 0.65;
+            zones.insects.y = height * 0.55;
+
+            // Atualizar posições das âncoras UI
+            uiBus.style.left = `${zones.bus.x}px`;
+            uiBus.style.top = `${zones.bus.y - 80}px`;
+            
+            uiLake.style.left = `${zones.lake.x}px`;
+            uiLake.style.top = `${zones.lake.y - 60}px`;
+            
+            uiBench.style.left = `${zones.bench.x}px`;
+            uiBench.style.top = `${zones.bench.y - 30}px`;
+            
+            uiInsects.style.left = `${zones.insects.x}px`;
+            uiInsects.style.top = `${zones.insects.y - 40}px`;
+        }
+
+        // Rastrear Rato
+        document.addEventListener('mousemove', (e) => {
+            player.targetX = e.clientX;
+            player.targetY = e.clientY;
+        });
+
+        // Alternar Dia/Noite
+        themeBtn.addEventListener('click', () => {
+            isNight = !isNight;
+            if (isNight) {
+                themeIcon.textContent = '🌙';
+                themeText.textContent = 'Modo Noite';
+                themeBtn.classList.remove('bg-amber-100', 'text-amber-800');
+            } else {
+                themeIcon.textContent = '☀️';
+                themeText.textContent = 'Modo Dia';
+                themeBtn.classList.add('bg-amber-100', 'text-amber-800');
+            }
+        });
+
+        // Funções Utilitárias
+        function lerp(start, end, amt) {
+            return (1 - amt) * start + amt * end;
+        }
+
+        function lerpColor(c1, c2, t) {
+            const hex2rgb = h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
+            const rgb1 = hex2rgb(c1);
+            const rgb2 = hex2rgb(c2);
+            const r = Math.round(lerp(rgb1[0], rgb2[0], t));
+            const g = Math.round(lerp(rgb1[1], rgb2[1], t));
+            const b = Math.round(lerp(rgb1[2], rgb2[2], t));
+            return `rgb(${r},${g},${b})`;
+        }
+
+        function dist(x1, y1, x2, y2) {
+            return Math.hypot(x2 - x1, y2 - y1);
+        }
+
+        function clamp(val, min, max) {
+            return Math.min(Math.max(val, min), max);
+        }
+
+        function mapRange(val, inMin, inMax, outMin, outMax) {
+            return outMin + (outMax - outMin) * clamp((val - inMin) / (inMax - inMin), 0, 1);
+        }
+
+        function toggleUI(el, isVisible) {
+            if (isVisible) {
+                el.classList.add('fade-show');
+                el.classList.remove('fade-hide');
+            } else {
+                el.classList.remove('fade-show');
+                el.classList.add('fade-hide');
+            }
+        }
+
+        // Loop de Desenho Principal
+        function draw() {
+            // Atualizar física do jogador
+            player.x += (player.targetX - player.x) * player.speed;
+            player.y += (player.targetY - player.y) * player.speed;
+
+            // Transição suave Dia/Noite
+            const targetNight = isNight ? 1 : 0;
+            nightTransition += (targetNight - nightTransition) * 0.05;
+
+            // Interpolação de Cores Globais
+            const cBg = lerpColor(colors.day.bg, colors.night.bg, nightTransition);
+            const cGrass = lerpColor(colors.day.grass, colors.night.grass, nightTransition);
+            const cPath = lerpColor(colors.day.path, colors.night.path, nightTransition);
+            const cPathPanel = lerpColor(colors.day.pathPanel, colors.night.pathPanel, nightTransition);
+            const cWater = lerpColor(colors.day.water, colors.night.water, nightTransition);
+            const cWood = lerpColor(colors.day.wood, colors.night.wood, nightTransition);
+            const cConcrete = lerpColor(colors.day.concrete, colors.night.concrete, nightTransition);
+            const cGreenRoof = lerpColor(colors.day.greenRoof, colors.night.greenRoof, nightTransition);
+
+            // 1. FUNDO & PAISAGEM
+            ctx.fillStyle = cBg;
+            ctx.fillRect(0, 0, width, height);
+
+            // Relva (Padrão)
+            ctx.fillStyle = cGrass;
+            for(let x = 0; x < width; x += 60) {
+                for(let y = 0; y < height; y += 60) {
+                    ctx.beginPath();
+                    ctx.arc(x + 30, y + 30, 25, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            // 2. LAGO (Fito-depuração)
+            ctx.fillStyle = cWater;
+            ctx.beginPath();
+            ctx.ellipse(zones.lake.x, zones.lake.y, 140, 90, 0.2, 0, Math.PI * 2);
+            ctx.fill();
+            // Plantas em redor
+            ctx.fillStyle = cGreenRoof;
+            for(let a = 0; a < Math.PI * 2; a += 0.4) {
+                let px = zones.lake.x + Math.cos(a) * 145;
+                let py = zones.lake.y + Math.sin(a) * 95;
+                ctx.beginPath(); ctx.arc(px, py, 12, 0, Math.PI*2); ctx.fill();
+            }
+
+            // 3. CICLOVIA (Painéis Solares)
+            const pathTop = zones.path.y - zones.path.h/2;
+            const pathBot = zones.path.y + zones.path.h/2;
+            
+            ctx.fillStyle = cPath;
+            ctx.fillRect(0, pathTop, width, zones.path.h);
+            
+            // Grelha Solar
+            ctx.strokeStyle = cPathPanel;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for(let x = 0; x < width; x += 30) {
+                ctx.moveTo(x, pathTop);
+                ctx.lineTo(x, pathBot);
+            }
+            for(let y = pathTop; y <= pathBot; y += 25) {
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+            }
+            ctx.stroke();
+
+            // Lógica do Contador
+            if (player.y > pathTop && player.y < pathBot) {
+                if (!playerOnPath) {
+                    playerOnPath = true;
+                    bikeTodayCount++;
+                    bikeTotalCount++;
+                    bikeTodayEl.textContent = bikeTodayCount.toLocaleString('en-US');
+                    bikeTotalEl.textContent = bikeTotalCount.toLocaleString('en-US');
+                    // Efeito Visual UI
+                    bikeTodayEl.parentElement.style.transform = 'scale(1.1)';
+                    setTimeout(() => bikeTodayEl.parentElement.style.transform = 'scale(1)', 200);
+                }
+            } else {
+                playerOnPath = false;
+            }
+
+            // 4. PARAGEM DE AUTOCARRO
+            ctx.save();
+            ctx.translate(zones.bus.x, zones.bus.y);
+            // Piso
+            ctx.fillStyle = cConcrete;
+            ctx.beginPath(); ctx.roundRect(-zones.bus.w/2 - 20, -zones.bus.h/2 - 20, zones.bus.w + 40, zones.bus.h + 40, 10); ctx.fill();
+            // Telhado Verde
+            ctx.fillStyle = cGreenRoof;
+            ctx.beginPath(); ctx.roundRect(-zones.bus.w/2, -zones.bus.h/2, zones.bus.w, zones.bus.h, 8); ctx.fill();
+            // Painel Digital
+            ctx.fillStyle = '#020617'; // Sempre escuro
+            ctx.fillRect(-80, -zones.bus.h/2 + 15, 160, 20);
+            ctx.restore();
+
+            // 5. BANCO SOLAR
+            ctx.save();
+            ctx.translate(zones.bench.x, zones.bench.y);
+            ctx.fillStyle = cWood;
+            ctx.beginPath(); ctx.roundRect(-zones.bench.w/2, -zones.bench.h/2, zones.bench.w, zones.bench.h, 5); ctx.fill();
+            // Painel solar embutido
+            ctx.fillStyle = '#020617';
+            ctx.fillRect(-zones.bench.w/2 + 10, -zones.bench.h/2 + 5, zones.bench.w - 20, zones.bench.h - 10);
+            ctx.restore();
+
+            // 6. HOTEL DE INSETOS
+            ctx.save();
+            ctx.translate(zones.insects.x, zones.insects.y);
+            ctx.fillStyle = cWood;
+            ctx.beginPath();
+            ctx.moveTo(0, -zones.insects.h/2); // Top
+            ctx.lineTo(zones.insects.w/2, -zones.insects.h/4); // Right top
+            ctx.lineTo(zones.insects.w/2, zones.insects.h/2); // Right bot
+            ctx.lineTo(-zones.insects.w/2, zones.insects.h/2); // Left bot
+            ctx.lineTo(-zones.insects.w/2, -zones.insects.h/4); // Left top
+            ctx.fill();
+            // Furos (Casulos)
+            ctx.fillStyle = '#1e293b';
+            for(let i = -1; i <= 1; i++) {
+                for(let j = 0; j <= 1; j++) {
+                    ctx.beginPath(); ctx.arc(i*10, j*12 + 5, 3, 0, Math.PI*2); ctx.fill();
+                }
+            }
+            ctx.restore();
+
+            // ==========================================
+            // LUZES DINÂMICAS E CAMADA ESCURA (NOITE)
+            // ==========================================
+            if (nightTransition > 0.01) {
+                // Sobreposição Escura
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.fillStyle = `rgba(3, 7, 18, ${0.85 * nightTransition})`; // Slate 950 alpha
+                ctx.fillRect(0, 0, width, height);
+
+                // Mudar para modo de luz
+                ctx.globalCompositeOperation = 'screen';
+
+                // Distâncias
+                const dBus = dist(player.x, player.y, zones.bus.x, zones.bus.y);
+                const dBench = dist(player.x, player.y, zones.bench.x, zones.bench.y);
+
+                // --- LUZ DA PARAGEM (Smart Stop Logic) ---
+                let busBrightness = mapRange(dBus, zones.bus.rad + 50, zones.bus.rad - 20, 0.3, 0.85); // 30% Eco, 85% Active
+                const busRad = 250;
+                const busGlow = ctx.createRadialGradient(zones.bus.x, zones.bus.y, 20, zones.bus.x, zones.bus.y, busRad);
+                busGlow.addColorStop(0, `rgba(253, 224, 71, ${busBrightness * nightTransition})`); // Yellow 300
+                busGlow.addColorStop(1, 'rgba(253, 224, 71, 0)');
+                ctx.fillStyle = busGlow;
+                ctx.fillRect(zones.bus.x - busRad, zones.bus.y - busRad, busRad * 2, busRad * 2);
+
+                // --- LUZ DO BANCO SOLAR (Carregamento Indutivo) ---
+                if (dBench < zones.bench.rad) {
+                    let benchIntensity = mapRange(dBench, zones.bench.rad, 30, 0.1, 0.7);
+                    const benchRad = 120;
+                    const benchGlow = ctx.createRadialGradient(zones.bench.x, zones.bench.y, 5, zones.bench.x, zones.bench.y, benchRad);
+                    benchGlow.addColorStop(0, `rgba(56, 189, 248, ${benchIntensity * nightTransition})`); // Sky 400
+                    benchGlow.addColorStop(1, 'rgba(56, 189, 248, 0)');
+                    ctx.fillStyle = benchGlow;
+                    ctx.fillRect(zones.bench.x - benchRad, zones.bench.y - benchRad, benchRad*2, benchRad*2);
+                }
+
+                // --- LEDs DA CICLOVIA DINÂMICA ---
+                ctx.lineCap = 'round';
+                ctx.lineWidth = 5;
+                const segLen = 25; // Tamanho do segmento LED
+                
+                for(let x = 0; x < width; x += segLen) {
+                    // Check dist to TOP margin
+                    let dTop = dist(player.x, player.y, x + segLen/2, pathTop);
+                    let intensityTop = mapRange(dTop, 200, 50, 0, 0.9) * nightTransition;
+                    
+                    if (intensityTop > 0.05) {
+                        ctx.strokeStyle = `rgba(16, 185, 129, ${intensityTop})`; // Emerald 500
+                        ctx.shadowColor = '#10b981';
+                        ctx.shadowBlur = 15 * intensityTop;
+                        ctx.beginPath();
+                        ctx.moveTo(x, pathTop);
+                        ctx.lineTo(x + segLen - 4, pathTop);
+                        ctx.stroke();
+                    }
+
+                    // Check dist to BOTTOM margin
+                    let dBot = dist(player.x, player.y, x + segLen/2, pathBot);
+                    let intensityBot = mapRange(dBot, 200, 50, 0, 0.9) * nightTransition;
+                    
+                    if (intensityBot > 0.05) {
+                        ctx.strokeStyle = `rgba(16, 185, 129, ${intensityBot})`;
+                        ctx.shadowColor = '#10b981';
+                        ctx.shadowBlur = 15 * intensityBot;
+                        ctx.beginPath();
+                        ctx.moveTo(x, pathBot);
+                        ctx.lineTo(x + segLen - 4, pathBot);
+                        ctx.stroke();
+                    }
+                }
+                ctx.shadowBlur = 0; // Reset
+                ctx.globalCompositeOperation = 'source-over'; // Voltar ao normal
+            }
+
+            // ==========================================
+            // DESENHAR JOGADOR (Cidadão)
+            // ==========================================
+            ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+            ctx.shadowBlur = isNight ? 10 : 0;
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#f8fafc'; // Slate 50
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#94a3b8'; // Slate 400
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // ==========================================
+            // ATUALIZAR INTERFACE (UIs FLUTUANTES)
+            // ==========================================
+            const dBus = dist(player.x, player.y, zones.bus.x, zones.bus.y);
+            toggleUI(uiBus, dBus < zones.bus.rad);
+            
+            const dLake = dist(player.x, player.y, zones.lake.x, zones.lake.y);
+            toggleUI(uiLake, dLake < zones.lake.rad);
+            
+            const dBench = dist(player.x, player.y, zones.bench.x, zones.bench.y);
+            toggleUI(uiBench, dBench < zones.bench.rad);
+            
+            const dInsects = dist(player.x, player.y, zones.insects.x, zones.insects.y);
+            toggleUI(uiInsects, dInsects < zones.insects.rad);
+
+            // Loop
+            requestAnimationFrame(draw);
+        }
+
+        // Inicialização
+        resize();
+        requestAnimationFrame(draw);
+
+    </script>
+</body>
+</html>

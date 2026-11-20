@@ -1,0 +1,2356 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>GREELING — Paragem de Autocarro Inteligente 3D (L7/A11 Smart Energy)</title>
+  
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Three.js r128 e OrbitControls via CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #090d11;
+      color: #f1f5f9;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+
+    /* Vidro fosco minimalista para o HUD */
+    .hud-glass {
+      background: rgba(12, 18, 24, 0.76);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    }
+
+    .hud-glass-emerald {
+      background: rgba(12, 22, 20, 0.82);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+    }
+
+    /* Hotspots 3D projetados */
+    .hotspot-pin {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      z-index: 15;
+      cursor: pointer;
+      transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s ease;
+    }
+
+    .hotspot-pin:hover {
+      transform: translate(-50%, -50%) scale(1.14);
+      z-index: 25;
+    }
+
+    .hotspot-dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 9999px;
+      background: rgba(16, 185, 129, 0.92);
+      border: 2px solid #ffffff;
+      color: #042f2e;
+      font-weight: 800;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.25), 0 4px 12px rgba(0, 0, 0, 0.6);
+      position: relative;
+    }
+
+    .hotspot-dot::after {
+      content: '';
+      position: absolute;
+      inset: -5px;
+      border-radius: 9999px;
+      border: 1.5px solid rgba(16, 185, 129, 0.65);
+      animation: pulseRing 2.2s infinite ease-out;
+    }
+
+    .hotspot-pin.active .hotspot-dot {
+      background: #ffffff;
+      color: #065f46;
+      border-color: #10b981;
+      box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.45);
+    }
+
+    .hotspot-label {
+      position: absolute;
+      left: 34px;
+      top: 50%;
+      transform: translateY(-50%);
+      white-space: nowrap;
+      background: rgba(9, 14, 19, 0.88);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #ecfdf5;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 9px;
+      border-radius: 8px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .hotspot-pin:hover .hotspot-label,
+    .hotspot-pin.active .hotspot-label {
+      opacity: 1;
+    }
+
+    @keyframes pulseRing {
+      0% { transform: scale(0.9); opacity: 0.9; }
+      100% { transform: scale(1.65); opacity: 0; }
+    }
+
+    /* Scrollbar discreta */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.03);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(16, 185, 129, 0.35);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Contentor do Canvas 3D -->
+  <div id="canvas-container"></div>
+
+  <!-- Contentor dos Hotspots 3D -->
+  <div id="hotspots-layer" class="fixed inset-0 pointer-events-none z-10 overflow-hidden"></div>
+
+  <!-- Ecrã de Carregamento Inicial -->
+  <div id="loader-screen" class="fixed inset-0 z-50 bg-[#080c10] flex flex-col items-center justify-center transition-opacity duration-500">
+    <div class="w-16 h-16 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center mb-4 animate-pulse">
+      <svg class="w-9 h-9 text-emerald-400" viewBox="0 0 36 36" fill="none">
+        <path d="M18 3L5 9V18C5 26.2 10.5 33.6 18 35.5C25.5 33.6 31 26.2 31 18V9L18 3Z" stroke="currentColor" stroke-width="2.2" fill="rgba(16,185,129,0.12)"/>
+        <path d="M11 22V14L23 11V22" stroke="#34d399" stroke-width="2" stroke-linecap="round"/>
+        <path d="M19 25C23 25 26 21.5 26 17C21.5 17 18 20 18 24" fill="#10b981"/>
+      </svg>
+    </div>
+    <h1 class="text-lg font-bold tracking-wider text-white">GREELING <span class="text-emerald-400 font-normal">| L7/A11</span></h1>
+    <p class="text-xs text-slate-400 mt-1">A construir infraestrutura urbana inteligente em 3D...</p>
+  </div>
+
+  <!-- BARRA SUPERIOR (Identidade GREELING + ODS + Exportação OBJ) -->
+  <header class="fixed top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+    <!-- Logótipo e Título -->
+    <div class="hud-glass rounded-2xl px-3.5 py-2.5 flex items-center gap-3 pointer-events-auto">
+      <div class="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center shrink-0">
+        <svg class="w-6 h-6 text-emerald-400" viewBox="0 0 36 36" fill="none">
+          <path d="M18 3L5 9V18C5 26.2 10.5 33.6 18 35.5C25.5 33.6 31 26.2 31 18V9L18 3Z" stroke="currentColor" stroke-width="2.2" fill="rgba(16,185,129,0.15)"/>
+          <path d="M11 22V14L23 11V22" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round"/>
+          <path d="M19 25C23 25 26 21.5 26 17C21.5 17 18 20 18 24" fill="#10b981"/>
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="font-extrabold tracking-wide text-sm sm:text-base text-white">GREELING</span>
+          <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+            L7/A11 Smart Energy
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-400 hidden sm:block">Sustainable Urban Systems • Integrated Green Infrastructure</p>
+      </div>
+
+      <!-- Badges ODS 7, 11 e 13 -->
+      <div class="hidden lg:flex items-center gap-1.5 ml-2 pl-3 border-l border-white/10">
+        <span title="ODS 7: Energia Limpa e Acessível" class="px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] font-bold">ODS 7</span>
+        <span title="ODS 11: Cidades e Comunidades Sustentáveis" class="px-2 py-1 rounded-lg bg-orange-500/20 border border-orange-400/40 text-orange-300 text-[10px] font-bold">ODS 11</span>
+        <span title="ODS 13: Ação Climática" class="px-2 py-1 rounded-lg bg-emerald-600/25 border border-emerald-400/40 text-emerald-300 text-[10px] font-bold">ODS 13</span>
+      </div>
+    </div>
+
+    <!-- Ações Rápidas Superiores -->
+    <div class="flex items-center gap-2 pointer-events-auto">
+      <!-- Estado Energético em Tempo Real -->
+      <div class="hud-glass rounded-2xl px-3 py-2 hidden md:flex items-center gap-3 text-xs">
+        <div class="flex items-center gap-1.5">
+          <span id="solar-status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+          <span class="text-slate-400">Solar:</span>
+          <span id="solar-watts" class="font-bold text-amber-300">680 W</span>
+        </div>
+        <div class="w-px h-4 bg-white/10"></div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-slate-400">Bateria LiFePO4:</span>
+          <span id="battery-pct" class="font-bold text-emerald-400">92%</span>
+        </div>
+        <div class="w-px h-4 bg-white/10"></div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-slate-400">Modo:</span>
+          <span id="lighting-mode-badge" class="font-bold text-cyan-300">DIA (Sensor Luz)</span>
+        </div>
+      </div>
+
+      <!-- Botão Orçamento Completo -->
+      <button id="btn-budget" class="hud-glass hover:border-emerald-400/50 text-slate-200 hover:text-white rounded-2xl px-3 py-2.5 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
+        <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+        </svg>
+        <span class="hidden sm:inline">Orçamento</span>
+        <span class="text-emerald-400 font-bold">≈ 18.200 €</span>
+      </button>
+
+      <!-- Botão Exportar .OBJ -->
+      <button id="btn-export-obj" class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-2xl px-3.5 py-2.5 text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-950/50 border border-emerald-400/30 transition cursor-pointer">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3"/>
+        </svg>
+        <span>Exportar .OBJ</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- PAINEL DE CONTROLO ESQUERDO (Simulações Interativas) -->
+  <aside id="sim-panel" class="fixed left-3 top-20 z-20 w-64 sm:w-72 hud-glass rounded-2xl p-3.5 transition-all duration-300">
+    <div class="flex items-center justify-between mb-2.5">
+      <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        Simulação Inteligente
+      </span>
+      <button id="toggle-sim-panel" class="text-slate-400 hover:text-white text-xs px-1.5 py-0.5 rounded-lg hover:bg-white/10 cursor-pointer" title="Minimizar/Expandir">
+        −
+      </button>
+    </div>
+
+    <div id="sim-panel-body" class="space-y-2">
+      <!-- Alternância Dia / Noite -->
+      <div class="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-black/40 border border-white/5">
+        <button id="btn-day" class="py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 transition cursor-pointer">
+          <svg class="w-3.5 h-3.5 text-amber-300" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/></svg>
+          Dia
+        </button>
+        <button id="btn-night" class="py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 text-slate-400 hover:text-white transition cursor-pointer">
+          <svg class="w-3.5 h-3.5 text-indigo-300" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>
+          Noite
+        </button>
+      </div>
+
+      <!-- Simular Presença (Sensor de Movimento) -->
+      <button id="btn-presence" class="w-full py-2 px-3 rounded-xl bg-white/5 hover:bg-emerald-500/20 border border-white/10 hover:border-emerald-400/40 text-left text-xs font-medium flex items-center justify-between transition cursor-pointer">
+        <span class="flex items-center gap-2">
+          <span id="presence-indicator" class="w-2 h-2 rounded-full bg-slate-500"></span>
+          <span>Simular Presença (PIR)</span>
+        </span>
+        <span id="presence-state-label" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">ECO 25%</span>
+      </button>
+
+      <!-- Alternar Vista do Totem Digital -->
+      <button id="btn-totem-screen" class="w-full py-2 px-3 rounded-xl bg-white/5 hover:bg-cyan-500/20 border border-white/10 hover:border-cyan-400/40 text-left text-xs font-medium flex items-center justify-between transition cursor-pointer">
+        <span class="flex items-center gap-2">
+          <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M10 7h4M10 11h4"/></svg>
+          <span>Ecrã Totem Digital</span>
+        </span>
+        <span id="totem-view-label" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30">Autocarros</span>
+      </button>
+
+      <!-- Anúncio Sonoro Acessibilidade -->
+      <button id="btn-audio-announce" class="w-full py-2 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/30 text-left text-xs font-medium flex items-center justify-between transition cursor-pointer">
+        <span class="flex items-center gap-2 text-amber-200">
+          <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/></svg>
+          <span>Anúncio Sonoro (Inclusivo)</span>
+        </span>
+        <span class="text-[10px] font-bold text-amber-300">OUVIR</span>
+      </button>
+
+      <!-- Vista Explodida / Raio-X -->
+      <div class="pt-1 border-t border-white/10 flex items-center justify-between gap-2">
+        <button id="btn-xray" class="flex-1 py-2 px-2.5 rounded-xl bg-white/5 hover:bg-purple-500/20 border border-white/10 hover:border-purple-400/40 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer">
+          <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"/></svg>
+          <span>Raio-X / Explodida</span>
+        </button>
+
+        <button id="btn-toggle-hotspots" class="py-2 px-2.5 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-xs font-semibold transition cursor-pointer" title="Mostrar/Ocultar Pontos Técnicos">
+          Pins
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- CARTÃO TÉCNICO DO HOTSPOT SELECIONADO (Direita) -->
+  <section id="info-card" class="fixed right-3 top-20 z-20 w-80 sm:w-96 hud-glass-emerald rounded-2xl p-4 hidden transition-all duration-300 max-h-[72vh] overflow-y-auto">
+    <div class="flex items-start justify-between gap-2">
+      <div>
+        <span id="card-badge" class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+          Componente Técnico
+        </span>
+        <h2 id="card-title" class="text-base font-bold text-white mt-1.5">Cobertura Solar & Eólica</h2>
+      </div>
+      <button id="close-info-card" class="w-7 h-7 rounded-xl bg-white/5 hover:bg-white/15 flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer">
+        ✕
+      </button>
+    </div>
+
+    <p id="card-desc" class="text-xs text-slate-300 leading-relaxed mt-2.5"></p>
+
+    <div id="card-specs" class="mt-3 space-y-1.5"></div>
+
+    <div class="mt-4 pt-3 border-t border-emerald-500/20 flex items-center justify-between">
+      <div>
+        <span class="text-[10px] uppercase tracking-wider text-slate-400 block">Custo Estimado (Apresentação)</span>
+        <span id="card-cost" class="text-sm font-extrabold text-emerald-400">1.500 €</span>
+      </div>
+      <span id="card-ods" class="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+        ODS 7 • Energia Limpa
+      </span>
+    </div>
+  </section>
+
+  <!-- MODAL DO ORÇAMENTO COMPLETO (Página 29 da Apresentação) -->
+  <div id="budget-modal" class="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="hud-glass-emerald rounded-3xl max-w-lg w-full p-5 sm:p-6 max-h-[85vh] overflow-y-auto">
+      <div class="flex items-center justify-between pb-3 border-b border-white/10">
+        <div>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Custos de Material — Projeto GREELING</span>
+          <h3 class="text-lg font-extrabold text-white">Orçamento da Paragem Inteligente</h3>
+        </div>
+        <button id="close-budget-modal" class="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white cursor-pointer">✕</button>
+      </div>
+
+      <div class="mt-3 divide-y divide-white/5 text-xs">
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Estrutura + cobertura + vidro temperado</span><span class="font-bold text-white">6.000 €</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Painéis solares monocristalinos</span><span class="font-bold text-white">1.500 €</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Bateria LiFePO4 + controlador solar</span><span class="font-bold text-white">2.000 €</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Iluminação LED inteligente + sensores</span><span class="font-bold text-white">500 €</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Painel digital informativo duplo</span><span class="font-bold text-white">1.500 €</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Portas USB-C / USB-A antivandalismo + instalação</span><span class="font-bold text-white">100 €</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Carregamento sem fios por indução</span><span class="font-bold text-white">100 €</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Jardim vertical ("Paragem Viva") + rega</span><span class="font-bold text-white">500 €</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Banco ergonómico com isolamento térmico</span><span class="font-bold text-white">500 €</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Pavimento tátil / acessibilidade sonora</span><span class="font-bold text-white">1.000 €</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Sensores ambientais / conectividade IoT</span><span class="font-bold text-white">500 €</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Cablagem / proteções elétricas</span><span class="font-bold text-white">1.000 €</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Montagem / instalação no espaço urbano</span><span class="font-bold text-white">3.000 €</span></div>
+      </div>
+
+      <div class="mt-4 pt-3 border-t border-emerald-500/30 flex items-center justify-between">
+        <span class="text-xs text-slate-300 font-medium">Investimento Total Estimado por Unidade</span>
+        <span class="text-xl font-extrabold text-emerald-400">≈ 18.200 €</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- BARRA INFERIOR DE VISTAS DE CÂMARA -->
+  <nav class="fixed bottom-3 left-3 right-3 z-20 flex flex-col items-center gap-2 pointer-events-none">
+    <!-- Legenda de Anúncio Sonoro Ativo -->
+    <div id="audio-banner" class="hud-glass-emerald rounded-2xl px-4 py-2 text-xs text-emerald-200 hidden items-center gap-2.5 max-w-xl text-center shadow-xl">
+      <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0"></span>
+      <span id="audio-banner-text">«Paragem Inteligente Greeling. Próximo autocarro: Linha 4, chega dentro de 3 minutos, ocupação 45% (Livre).»</span>
+    </div>
+
+    <!-- Botões de Presets de Câmara -->
+    <div class="hud-glass rounded-2xl p-1.5 flex items-center gap-1 overflow-x-auto max-w-full pointer-events-auto">
+      <button data-cam="geral" class="cam-btn active px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500 text-slate-950 transition whitespace-nowrap cursor-pointer">
+        Vista Geral
+      </button>
+      <button data-cam="solar" class="cam-btn px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition whitespace-nowrap cursor-pointer">
+        Painéis Solares
+      </button>
+      <button data-cam="jardim" class="cam-btn px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition whitespace-nowrap cursor-pointer">
+        Jardim Vertical
+      </button>
+      <button data-cam="totem" class="cam-btn px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition whitespace-nowrap cursor-pointer">
+        Totem & USBs
+      </button>
+      <button data-cam="acessibilidade" class="cam-btn px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition whitespace-nowrap cursor-pointer">
+        Acessibilidade
+      </button>
+      <button data-cam="tecnico" class="cam-btn px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition whitespace-nowrap cursor-pointer">
+        Bateria & Controlador
+      </button>
+    </div>
+  </nav>
+
+  <!-- NOTIFICAÇÃO TOAST (Substitui alert()) -->
+  <div id="toast-box" class="fixed bottom-16 right-4 z-50 hud-glass-emerald rounded-2xl px-4 py-3 text-xs text-white font-medium shadow-2xl transform translate-y-6 opacity-0 pointer-events-none transition-all duration-300 flex items-center gap-2.5">
+    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+    <span id="toast-message">Ficheiro exportado com sucesso!</span>
+  </div>
+
+  <script>
+    /**
+     * ============================================================================
+     * GREELING — PARAGEM DE AUTOCARRO INTELIGENTE 3D (L7/A11 SMART ENERGY)
+     * Aplicação Three.js interativa baseada na apresentação "Cidade Sustentável"
+     * ============================================================================
+     */
+
+    // Estado global da aplicação e simulação
+    const appState = {
+      isNight: false,
+      presenceDetected: false,
+      totemView: 'buses', // 'buses' ou 'weather'
+      isExploded: false,
+      showHotspots: true,
+      selectedHotspotId: null,
+      solarWatts: 680,
+      batteryPct: 92,
+      clockMinutes: 18
+    };
+
+    // Dados técnicos detalhados dos 8 hotspots (fiéis à apresentação)
+    const HOTSPOTS_DATA = [
+      {
+        id: 'solar',
+        num: '1',
+        title: 'Cobertura Solar & Micro-Eólica',
+        badge: 'Geração Renovável (ODS 7)',
+        pos3D: new THREE.Vector3(0.35, 3.22, -0.15),
+        camKey: 'solar',
+        cost: '1.500 € (Painéis) + 6.000 € (Estrutura)',
+        ods: 'ODS 7 • Energia Limpa',
+        desc: 'Cobertura inclinada revestida interiormente com ripas de madeira quente e equipada no topo com painéis fotovoltaicos monocristalinos de alta eficiência e apoio micro-eólico vertical, tornando a paragem 100% autónoma da rede elétrica.',
+        specs: [
+          '3 módulos monocristalinos inclinados a 22° com moldura em alumínio anodizado',
+          'Forro interior acústico e térmico em ripas de madeira natural tratada',
+          'Inclinação estrutural para encaminhamento da água da chuva para o reservatório'
+        ]
+      },
+      {
+        id: 'jardim',
+        num: '2',
+        title: 'Jardim Vertical ("Paragem Viva") & Rega',
+        badge: 'Infraestrutura Verde (ODS 11 & 13)',
+        pos3D: new THREE.Vector3(2.26, 1.55, -0.20),
+        camKey: 'jardim',
+        cost: '500 €',
+        ods: 'ODS 13 • Ação Climática',
+        desc: 'Parede lateral e traseira revestida com musgo, líquenes e plantas trepadeiras nativas que reduzem o efeito de ilha de calor urbana e absorvem CO₂, alimentadas por captação pluvial.',
+        specs: [
+          'Calha no teto recolhe água da chuva para reservatório lateral translúcido',
+          'Rega automática por gotejamento alimentada por mini-painel solar dedicado',
+          'Sensores de humidade do solo monitorizam as necessidades hídricas em tempo real'
+        ]
+      },
+      {
+        id: 'totem',
+        num: '3',
+        title: 'Totem Digital Duplo L7/A11',
+        badge: 'Informação & Conectividade',
+        pos3D: new THREE.Vector3(-2.25, 1.85, 0.14),
+        camKey: 'totem',
+        cost: '1.500 €',
+        ods: 'ODS 11 • Mobilidade Inteligente',
+        desc: 'Sistema informativo em tempo real composto por letreiro LED superior (hora, temperatura e chegadas) e ecrã vertical de alta legibilidade com dados de lotação dos autocarros e qualidade do ar.',
+        specs: [
+          'Estado de ocupação em tempo real (Livre 18%-45% vs. Moderada 78%)',
+          'Monitorização meteorológica, temperatura, humidade, vento e Índice de Qualidade do Ar',
+          'Clique no ecrã 3D ou no painel lateral para alternar entre vistas'
+        ]
+      },
+      {
+        id: 'usb',
+        num: '4',
+        title: 'Portas USB-C / USB-A & Indução Qi',
+        badge: 'Carregamento Público Gratuito',
+        pos3D: new THREE.Vector3(-2.25, 0.88, 0.14),
+        camKey: 'totem',
+        cost: '100 € (USB) + 100 € (Indução)',
+        ods: 'ODS 7 • Energia Acessível',
+        desc: 'Módulo robusto protegido contra vandalismo com tampas metálicas articuladas e indicadores LED verdes de energia sobrante na bateria, complementado por bases sem fios no banco.',
+        specs: [
+          '4 portas USB-C de carregamento rápido 60W Power Delivery (PD)',
+          '4 portas USB-A de carregamento rápido 18W Quick Charge 3.0',
+          '2 bases circulares de carregamento por indução integradas no banco de madeira'
+        ]
+      },
+      {
+        id: 'banco',
+        num: '5',
+        title: 'Banco com Isolamento Térmico',
+        badge: 'Conforto Ergonométrico',
+        pos3D: new THREE.Vector3(0.35, 0.56, -0.68),
+        camKey: 'acessibilidade',
+        cost: '500 €',
+        ods: 'ODS 11 • Espaço Público Inclusivo',
+        desc: 'Assento ergonómico em ripas de madeira natural com núcleo de isolamento térmico — nunca utiliza metal na superfície de contacto, garantindo conforto térmico tanto no inverno como no verão.',
+        specs: [
+          'Superfície 100% em madeira tratada termicamente isolada',
+          'Apoio de braço ergonómico para facilitar o sentar e levantar a idosos',
+          'Iluminação LED inferior para visibilidade e segurança noturna'
+        ]
+      },
+      {
+        id: 'iluminacao',
+        num: '6',
+        title: 'Iluminação LED Adaptativa & Segurança',
+        badge: 'Eficiência & Monitorização',
+        pos3D: new THREE.Vector3(0.35, 2.55, 0.65),
+        camKey: 'geral',
+        cost: '500 € (LED/Sensores) + 500 € (IoT)',
+        ods: 'ODS 7 & 11 • Eficiência Energética',
+        desc: 'Calhas LED lineares no teto e faixa luminosa no pavimento frontal geridas por sensor de luminosidade ambiente e sensor de movimento (25% em Modo Eco, 100% quando deteta passageiros).',
+        specs: [
+          'Sensor PIR de presença: reduz consumo em 75% quando a paragem está vazia',
+          'Sensor de luminosidade ambiente evita consumo durante o dia',
+          'Câmara de monitorização contínua para segurança e prevenção de vandalismo'
+        ]
+      },
+      {
+        id: 'acessibilidade',
+        num: '7',
+        title: 'Piso Tátil & Anúncio Sonoro',
+        badge: 'Acessibilidade Universal',
+        pos3D: new THREE.Vector3(-0.95, 0.22, 0.85),
+        camKey: 'acessibilidade',
+        cost: '1.000 €',
+        ods: 'ODS 11 • Inclusão Total',
+        desc: 'Pavimento urbano com guias táteis direcionais e tapete de alerta em relevo amarelo para pessoas com deficiência visual, integrado com sistema de anúncio vocal automático dos horários.',
+        specs: [
+          'Piso tátil direcional e de alerta em relevo de alto contraste',
+          'Botão acessível com anúncio sonoro automático em Português do próximo autocarro',
+          'Acesso nivelado sem barreiras arquitetónicas para cadeiras de rodas'
+        ]
+      },
+      {
+        id: 'bateria',
+        num: '8',
+        title: 'Baterias LiFePO4 & Controlador MPPT',
+        badge: 'Armazenamento & Gestão',
+        pos3D: new THREE.Vector3(-2.25, 0.42, -0.15),
+        camKey: 'tecnico',
+        cost: '2.000 € (Bateria) + 1.000 € (Cablagem) + 3.000 € (Montagem)',
+        ods: 'ODS 7 • Armazenamento Inteligente',
+        desc: 'Núcleo energético alojado no compartimento técnico blindado do totem, armazenando excedentes solares para garantir autonomia até 72 horas sem sol e alimentar ecrãs, LEDs e USBs.',
+        specs: [
+          'Banco modular de baterias de Fosfato de Ferro-Lítio (LiFePO4) de longa vida útil',
+          'Controlador solar MPPT inteligente com gestão de carga sobrante para portas USB',
+          'Ative o modo "Raio-X / Explodida" para inspecionar os módulos internos'
+        ]
+      }
+    ];
+
+    // Presets suaves de câmara
+    const CAMERA_PRESETS = {
+      geral: { pos: new THREE.Vector3(-4.2, 2.75, 5.4), target: new THREE.Vector3(0.0, 1.35, -0.1) },
+      solar: { pos: new THREE.Vector3(2.8, 4.3, 3.2), target: new THREE.Vector3(0.2, 2.85, -0.15) },
+      jardim: { pos: new THREE.Vector3(4.6, 1.95, 1.85), target: new THREE.Vector3(2.15, 1.45, -0.25) },
+      totem: { pos: new THREE.Vector3(-3.8, 1.65, 2.35), target: new THREE.Vector3(-2.22, 1.42, 0.0) },
+      acessibilidade: { pos: new THREE.Vector3(-1.3, 1.35, 2.75), target: new THREE.Vector3(-0.2, 0.55, 0.1) },
+      tecnico: { pos: new THREE.Vector3(-3.6, 1.25, -1.95), target: new THREE.Vector3(-2.25, 0.85, -0.15) }
+    };
+
+    // Variáveis globais Three.js
+    let scene, camera, renderer, controls;
+    let busStopGroup;
+    let hemiLight, dirLight, shelterCeilingLight, floorLedLight, benchLedLight;
+    let ceilingLedMat, benchLedMat, floorLedMat, sensorRingMat, inductionLedMat;
+    let totemScreenTexture, totemScreenCanvas, totemScreenCtx;
+    let headerLedTexture, headerLedCanvas, headerLedCtx;
+    let windTurbineRotor, waterLevelMesh, sensorWaveMesh;
+    let raycaster, pointer;
+
+    // Referências para animação de Vista Explodida / Raio-X
+    const explodedParts = [];
+    const xrayMaterials = [];
+
+    // Alvos de interpolação suave da câmara
+    let targetCamPos = CAMERA_PRESETS.geral.pos.clone();
+    let targetLookAt = CAMERA_PRESETS.geral.target.clone();
+    let isCameraAnimating = false;
+
+    /**
+     * ============================================================================
+     * GERAÇÃO DE TEXTURAS PROCEDIMENTAIS (CanvasTextures de Alta Nitidez)
+     * ============================================================================
+     */
+
+    // 1. Textura de Células Solares Monocristalinas
+    function createSolarPanelTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      // Fundo azul-escuro profundo monocristalino
+      const grad = ctx.createLinearGradient(0, 0, 512, 512);
+      grad.addColorStop(0, '#0a192f');
+      grad.addColorStop(0.5, '#112240');
+      grad.addColorStop(1, '#091426');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Grelha de células 6x10
+      const cols = 6;
+      const rows = 10;
+      const cellW = 512 / cols;
+      const cellH = 512 / rows;
+
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.45)';
+      ctx.lineWidth = 2;
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const x = c * cellW;
+          const y = r * cellH;
+          ctx.strokeRect(x + 1.5, y + 1.5, cellW - 3, cellH - 3);
+
+          // Finos barramentos prateados internos
+          ctx.fillStyle = 'rgba(203, 213, 225, 0.22)';
+          ctx.fillRect(x + cellW * 0.33, y + 2, 1, cellH - 4);
+          ctx.fillRect(x + cellW * 0.66, y + 2, 1, cellH - 4);
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.anisotropy = 4;
+      return tex;
+    }
+
+    // 2. Textura de Madeira Natural Ripada
+    function createWoodTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#9c6234';
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Veios orgânicos de madeira
+      for (let i = 0; i < 180; i++) {
+        const y = Math.random() * 512;
+        ctx.strokeStyle = i % 2 === 0 ? 'rgba(68, 36, 14, 0.18)' : 'rgba(196, 138, 86, 0.16)';
+        ctx.lineWidth = 1 + Math.random() * 2.5;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.bezierCurveTo(170, y + (Math.random() - 0.5) * 14, 340, y + (Math.random() - 0.5) * 14, 512, y);
+        ctx.stroke();
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      return tex;
+    }
+
+    // 3. Textura de Vidro Temperado com Pontos Brancos de Segurança
+    function createSafetyGlassTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.clearRect(0, 0, 512, 512);
+
+      // Faixa horizontal dupla de pontos brancos de segurança (acessibilidade visual)
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+      const bands = [215, 295];
+      bands.forEach(by => {
+        for (let x = 16; x < 512; x += 24) {
+          ctx.beginPath();
+          ctx.arc(x, by, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+
+      const tex = new THREE.CanvasTexture(canvas);
+      return tex;
+    }
+
+    // 4. Textura de Calçada Urbana / Lajetas
+    function createPavementTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#525860';
+      ctx.fillRect(0, 0, 512, 512);
+
+      const tile = 64;
+      for (let y = 0; y < 512; y += tile) {
+        for (let x = 0; x < 512; x += tile) {
+          const shade = 78 + Math.floor(Math.random() * 16);
+          ctx.fillStyle = `rgb(${shade}, ${shade + 3}, ${shade + 7})`;
+          ctx.fillRect(x + 2, y + 2, tile - 4, tile - 4);
+        }
+      }
+
+      // Ruído mineral subtil
+      for (let i = 0; i < 2500; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)';
+        ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(8, 4);
+      return tex;
+    }
+
+    // 5. Letreiro LED Horizontal Superior ("22:18 | 16°C | Linha 4 - 3 min")
+    function initHeaderLedCanvas() {
+      headerLedCanvas = document.createElement('canvas');
+      headerLedCanvas.width = 1024;
+      headerLedCanvas.height = 128;
+      headerLedCtx = headerLedCanvas.getContext('2d');
+      headerLedTexture = new THREE.CanvasTexture(headerLedCanvas);
+      headerLedTexture.anisotropy = 4;
+      updateHeaderLedCanvas();
+    }
+
+    function updateHeaderLedCanvas() {
+      const ctx = headerLedCtx;
+      ctx.fillStyle = '#090b0e';
+      ctx.fillRect(0, 0, 1024, 128);
+
+      // Moldura subtil
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(4, 4, 1016, 120);
+
+      const timeStr = appState.isNight ? '22:18' : '14:35';
+      const tempStr = appState.isNight ? '16°C' : '22°C';
+
+      // Texto âmbar LED brilhante (fiel à pág. 16)
+      ctx.font = 'bold 54px "Inter", monospace';
+      ctx.fillStyle = '#fbbf24';
+      ctx.shadowColor = '#f59e0b';
+      ctx.shadowBlur = 14;
+      ctx.textBaseline = 'middle';
+
+      ctx.textAlign = 'left';
+      ctx.fillText(`${timeStr}   ${tempStr}`, 42, 66);
+
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#34d399';
+      ctx.shadowColor = '#10b981';
+      ctx.fillText('Linha 4 - 3 min', 982, 66);
+
+      ctx.shadowBlur = 0;
+      headerLedTexture.needsUpdate = true;
+    }
+
+    // 6. Ecrã Digital Vertical do Totem (Vistas: Ocupação Autocarros vs. Meteorologia & Ar)
+    function initTotemScreenCanvas() {
+      totemScreenCanvas = document.createElement('canvas');
+      totemScreenCanvas.width = 512;
+      totemScreenCanvas.height = 960;
+      totemScreenCtx = totemScreenCanvas.getContext('2d');
+      totemScreenTexture = new THREE.CanvasTexture(totemScreenCanvas);
+      totemScreenTexture.anisotropy = 4;
+      updateTotemScreenCanvas();
+    }
+
+    function drawRoundedRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function updateTotemScreenCanvas() {
+      const ctx = totemScreenCtx;
+      const W = 512;
+      const H = 960;
+
+      // Fundo escuro elegante
+      ctx.fillStyle = '#0b141a';
+      ctx.fillRect(0, 0, W, H);
+
+      // Cabeçalho GREELING / L7/A11
+      ctx.fillStyle = '#064e3b';
+      ctx.fillRect(0, 0, W, 74);
+      ctx.fillStyle = '#ecfdf5';
+      ctx.font = '800 22px Inter, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('GREELING', 24, 45);
+
+      ctx.fillStyle = '#6ee7b7';
+      ctx.font = '600 17px Inter, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText('L7/A11 | SMART ENERGY', W - 24, 45);
+
+      if (appState.totemView === 'buses') {
+        // === VISTA 1: HORÁRIOS E ESTADO DE OCUPAÇÃO DOS AUTOCARROS (Página 17) ===
+        const buses = [
+          { line: 'Linha 4', time: appState.isNight ? '22:20' : '14:38', pct: 45, label: '45% (Livre)', color: '#22c55e', bg: 'rgba(20, 83, 45, 0.55)' },
+          { line: 'Linha 4', time: appState.isNight ? '22:35' : '14:53', pct: 18, label: '18% (Muito Livre)', color: '#4ade80', bg: 'rgba(20, 83, 45, 0.4)' },
+          { line: 'Linha 27', time: appState.isNight ? '22:25' : '14:42', pct: 78, label: '78% (Moderada)', color: '#eab308', bg: 'rgba(113, 63, 18, 0.65)' },
+          { line: 'Linha 12', time: appState.isNight ? '22:40' : '15:00', pct: 32, label: '32% (Livre)', color: '#22c55e', bg: 'rgba(20, 83, 45, 0.4)' }
+        ];
+
+        let y = 96;
+        buses.forEach(bus => {
+          drawRoundedRect(ctx, 20, y, W - 40, 128, 16);
+          ctx.fillStyle = bus.bg;
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+
+          // Ícone estilizado de autocarro
+          drawRoundedRect(ctx, 36, y + 24, 54, 62, 10);
+          ctx.fillStyle = bus.color;
+          ctx.fill();
+          ctx.fillStyle = '#091116';
+          ctx.fillRect(43, y + 32, 40, 24);
+          ctx.fillRect(44, y + 72, 10, 8);
+          ctx.fillRect(70, y + 72, 10, 8);
+
+          // Linha e Hora
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '800 32px Inter, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText(`${bus.line}  |  ${bus.time}`, 108, y + 52);
+
+          // Barra de lotação
+          drawRoundedRect(ctx, 108, y + 72, 210, 20, 10);
+          ctx.fillStyle = 'rgba(0,0,0,0.45)';
+          ctx.fill();
+
+          drawRoundedRect(ctx, 108, y + 72, Math.max(24, (210 * bus.pct) / 100), 20, 10);
+          ctx.fillStyle = bus.color;
+          ctx.fill();
+
+          // Texto percentagem
+          ctx.fillStyle = '#f8fafc';
+          ctx.font = '700 18px Inter, sans-serif';
+          ctx.fillText(bus.label, 328, y + 88);
+
+          y += 142;
+        });
+
+        // Secção inferior: Estado de Ocupação dos Autocarros
+        y += 10;
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '700 19px Inter, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('ESTADO DE OCUPAÇÃO DOS AUTOCARROS', 24, y + 18);
+
+        drawRoundedRect(ctx, 20, y + 32, W - 40, 195, 16);
+        ctx.fillStyle = 'rgba(15, 23, 32, 0.9)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.35)';
+        ctx.stroke();
+
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '600 19px Inter, sans-serif';
+        ctx.fillText('• Sensores de lotação embarcada ativos', 38, y + 72);
+        ctx.fillText('• Frota 100% elétrica com recarga solar', 38, y + 108);
+        ctx.fillStyle = '#34d399';
+        ctx.font = '700 18px Inter, sans-serif';
+        ctx.fillText('Toque no ecrã para ver Qualidade do Ar →', 38, y + 165);
+
+      } else {
+        // === VISTA 2: INFORMAÇÃO METEOROLÓGICA & QUALIDADE DO AR (Página 17) ===
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '800 23px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('INFORMAÇÃO METEOROLÓGICA', W / 2, 118);
+        ctx.fillText('& QUALIDADE DO AR', W / 2, 148);
+
+        // Cartão azul meteorologia
+        drawRoundedRect(ctx, 20, 172, W - 40, 165, 18);
+        const skyGrad = ctx.createLinearGradient(0, 172, W, 337);
+        skyGrad.addColorStop(0, '#0284c7');
+        skyGrad.addColorStop(1, '#0369a1');
+        ctx.fillStyle = skyGrad;
+        ctx.fill();
+
+        // Sol e nuvem desenhados
+        ctx.fillStyle = '#fde047';
+        ctx.beginPath();
+        ctx.arc(98, 246, 30, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(122, 264, 22, 0, Math.PI * 2);
+        ctx.arc(146, 264, 18, 0, Math.PI * 2);
+        ctx.arc(102, 268, 16, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '800 42px Inter, sans-serif';
+        ctx.textAlign = 'left';
+        const timeNow = appState.isNight ? '22:16' : '14:35';
+        const tempNow = appState.isNight ? '18°C' : '22°C';
+        ctx.fillText(`${timeNow} | ${tempNow}`, 195, 264);
+
+        // Cartão verde Índice de Qualidade do Ar
+        drawRoundedRect(ctx, 20, 356, W - 40, 240, 18);
+        ctx.fillStyle = '#15803d';
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '800 21px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('ÍNDICE DE QUALIDADE DO AR: BOM (BOA)', W / 2, 398);
+
+        // Barra cromática IQA
+        const barColors = ['#22c55e', '#84cc16', '#eab308', '#f97316', '#ef4444'];
+        const segW = (W - 88) / 5;
+        barColors.forEach((col, idx) => {
+          ctx.fillStyle = col;
+          ctx.fillRect(44 + idx * segW, 424, segW - 3, 24);
+        });
+
+        // Ponteiro indicador na zona verde/boa
+        ctx.fillStyle = '#0f172a';
+        ctx.beginPath();
+        ctx.moveTo(118, 452);
+        ctx.lineTo(106, 474);
+        ctx.lineTo(130, 474);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#ecfdf5';
+        ctx.font = '600 18px Inter, sans-serif';
+        ctx.fillText(`TEMPO ATUAL: Sol com nuvens | ${tempNow}`, W / 2, 516);
+        ctx.fillText('HUMIDADE: 74%  |  VENTO: 10 km/h  |  UV: Baixo', W / 2, 552);
+
+        // Cartão Alertas e Recomendações
+        drawRoundedRect(ctx, 20, 616, W - 40, 290, 18);
+        ctx.fillStyle = '#14532d';
+        ctx.fill();
+
+        ctx.fillStyle = '#86efac';
+        ctx.font = '800 21px Inter, sans-serif';
+        ctx.fillText('ALERTAS E RECOMENDAÇÕES', W / 2, 658);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '700 22px Inter, sans-serif';
+        ctx.fillText('QUALIDADE DO AR: EXCELENTE.', W / 2, 710);
+        ctx.fillText('NENHUM ALERTA.', W / 2, 742);
+        ctx.fillText('APROVEITE O AR PURO!', W / 2, 774);
+
+        ctx.fillStyle = '#bbf7d0';
+        ctx.font = '500 17px Inter, sans-serif';
+        ctx.fillText('RECOMENDAÇÃO: Caminhar ou andar de', W / 2, 832);
+        ctx.fillText('bicicleta é seguro e saudável hoje.', W / 2, 856);
+      }
+
+      totemScreenTexture.needsUpdate = true;
+    }
+
+    /**
+     * ============================================================================
+     * INICIALIZAÇÃO DA CENA 3D E CONSTRUÇÃO DA PARAGEM GREELING
+     * ============================================================================
+     */
+    function initScene() {
+      const container = document.getElementById('canvas-container');
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color('#cce3de');
+      scene.fog = new THREE.FogExp2('#cce3de', 0.024);
+
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 120);
+      camera.position.copy(CAMERA_PRESETS.geral.pos);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.08;
+      container.appendChild(renderer.domElement);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.target.copy(CAMERA_PRESETS.geral.target);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.065;
+      controls.maxPolarAngle = Math.PI * 0.485;
+      controls.minDistance = 1.6;
+      controls.maxDistance = 16;
+      controls.update();
+
+      // Interrompe animação automática de preset se o utilizador arrastar manualmente
+      controls.addEventListener('start', () => {
+        isCameraAnimating = false;
+      });
+
+      raycaster = new THREE.Raycaster();
+      pointer = new THREE.Vector2();
+
+      setupLights();
+      buildEnvironment();
+      buildGreelingBusStop();
+      createHotspotPins();
+      bindUIEvents();
+
+      // Esconde loader suavemente
+      setTimeout(() => {
+        const loader = document.getElementById('loader-screen');
+        loader.style.opacity = '0';
+        setTimeout(() => loader.remove(), 500);
+      }, 450);
+
+      animate();
+    }
+
+    function setupLights() {
+      hemiLight = new THREE.HemisphereLight('#f0fdf4', '#334155', 0.85);
+      hemiLight.position.set(0, 12, 0);
+      scene.add(hemiLight);
+
+      dirLight = new THREE.DirectionalLight('#fffbeb', 1.45);
+      dirLight.position.set(6, 11, 7);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 2048;
+      dirLight.shadow.mapSize.height = 2048;
+      dirLight.shadow.camera.near = 1;
+      dirLight.shadow.camera.far = 30;
+      const d = 6.5;
+      dirLight.shadow.camera.left = -d;
+      dirLight.shadow.camera.right = d;
+      dirLight.shadow.camera.top = d;
+      dirLight.shadow.camera.bottom = -d;
+      dirLight.shadow.bias = -0.0005;
+      scene.add(dirLight);
+
+      // Luz LED interior do teto da paragem
+      shelterCeilingLight = new THREE.PointLight('#fef3c7', 0.2, 6.5, 1.5);
+      shelterCeilingLight.position.set(0.25, 2.55, -0.15);
+      scene.add(shelterCeilingLight);
+
+      // Luz LED de segurança frontal no chão
+      floorLedLight = new THREE.PointLight('#fde68a', 0.1, 4.5, 1.6);
+      floorLedLight.position.set(0.25, 0.35, 1.05);
+      scene.add(floorLedLight);
+
+      // Luz LED sob o banco
+      benchLedLight = new THREE.PointLight('#fef08a', 0.1, 2.8, 1.6);
+      benchLedLight.position.set(0.25, 0.28, -0.65);
+      scene.add(benchLedLight);
+    }
+
+    /**
+     * Constrói o passeio urbano, estrada, ciclovia fotovoltaica GREELING e piso tátil
+     */
+    function buildEnvironment() {
+      const envGroup = new THREE.Group();
+      envGroup.name = 'Envolvente_Urbana';
+
+      // Passeio principal
+      const pavementTex = createPavementTexture();
+      const sidewalkMat = new THREE.MeshStandardMaterial({
+        map: pavementTex,
+        roughness: 0.82,
+        metalness: 0.05
+      });
+      const sidewalk = new THREE.Mesh(new THREE.BoxGeometry(11, 0.16, 4.2), sidewalkMat);
+      sidewalk.position.set(0, 0.08, -0.35);
+      sidewalk.receiveShadow = true;
+      sidewalk.name = 'Passeio_Urbano';
+      envGroup.add(sidewalk);
+
+      // Lancil de granito
+      const curbMat = new THREE.MeshStandardMaterial({ color: '#94a3b8', roughness: 0.75 });
+      const curb = new THREE.Mesh(new THREE.BoxGeometry(11, 0.17, 0.18), curbMat);
+      curb.position.set(0, 0.085, 1.72);
+      curb.receiveShadow = true;
+      curb.name = 'Lancil_Granito';
+      envGroup.add(curb);
+
+      // Estrada asfaltada
+      const roadMat = new THREE.MeshStandardMaterial({ color: '#1e242b', roughness: 0.9 });
+      const road = new THREE.Mesh(new THREE.BoxGeometry(16, 0.06, 6.5), roadMat);
+      road.position.set(0, 0.03, 4.8);
+      road.receiveShadow = true;
+      road.name = 'Faixa_Rodagem';
+      envGroup.add(road);
+
+      // Marcação rodoviária amarela "BUS"
+      const busLineMat = new THREE.MeshBasicMaterial({ color: '#eab308' });
+      const busLine = new THREE.Mesh(new THREE.PlaneGeometry(6.8, 0.12), busLineMat);
+      busLine.rotation.x = -Math.PI / 2;
+      busLine.position.set(0, 0.065, 2.05);
+      envGroup.add(busLine);
+
+      // Ciclovia Verde Sustentável GREELING na traseira do passeio (z = -2.8)
+      const bikeLaneMat = new THREE.MeshStandardMaterial({ color: '#059669', roughness: 0.65 });
+      const bikeLane = new THREE.Mesh(new THREE.BoxGeometry(11, 0.08, 1.3), bikeLaneMat);
+      bikeLane.position.set(0, 0.04, -3.1);
+      bikeLane.receiveShadow = true;
+      bikeLane.name = 'Ciclovia_Sustentavel';
+      envGroup.add(bikeLane);
+
+      // === PISO TÁTIL DE ACESSIBILIDADE (Direcional e Alerta Amarelo em Relevo) ===
+      const tactileMat = new THREE.MeshStandardMaterial({
+        color: '#eab308',
+        roughness: 0.55,
+        metalness: 0.08
+      });
+
+      // Guia tátil longitudinal ao longo do passeio
+      const tactileLongBase = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.012, 0.32), tactileMat);
+      tactileLongBase.position.set(-0.2, 0.165, 1.25);
+      tactileLongBase.receiveShadow = true;
+      tactileLongBase.name = 'Piso_Tatil_Direcional';
+      envGroup.add(tactileLongBase);
+
+      // Barras longitudinais em relevo no piso tátil
+      for (let bx = -3.6; bx <= 3.2; bx += 0.28) {
+        for (let bz = -0.10; bz <= 0.10; bz += 0.065) {
+          const rib = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.008, 0.022), tactileMat);
+          rib.position.set(bx, 0.174, 1.25 + bz);
+          envGroup.add(rib);
+        }
+      }
+
+      // Tapete tátil de alerta (pitões) junto ao Totem e entrada do abrigo
+      const alertPad = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.012, 0.65), tactileMat);
+      alertPad.position.set(-1.55, 0.165, 0.85);
+      alertPad.name = 'Piso_Tatil_Alerta';
+      envGroup.add(alertPad);
+
+      const studGeo = new THREE.CylinderGeometry(0.016, 0.02, 0.01, 10);
+      for (let sx = -0.25; sx <= 0.25; sx += 0.08) {
+        for (let sz = -0.25; sz <= 0.25; sz += 0.08) {
+          const stud = new THREE.Mesh(studGeo, tactileMat);
+          stud.position.set(-1.55 + sx, 0.175, 0.85 + sz);
+          envGroup.add(stud);
+        }
+      }
+
+      scene.add(envGroup);
+    }
+
+    /**
+     * Constrói o modelo 3D completo e articulado da Paragem Inteligente GREELING
+     */
+    function buildGreelingBusStop() {
+      busStopGroup = new THREE.Group();
+      busStopGroup.name = 'Paragem_Inteligente_GREELING';
+
+      const woodTex = createWoodTexture();
+      const solarTex = createSolarPanelTexture();
+      const glassTex = createSafetyGlassTexture();
+
+      // Materiais principais
+      const anthraciteMat = new THREE.MeshStandardMaterial({
+        color: '#1e242b',
+        roughness: 0.42,
+        metalness: 0.72
+      });
+
+      const aluminumMat = new THREE.MeshStandardMaterial({
+        color: '#cbd5e1',
+        roughness: 0.32,
+        metalness: 0.85
+      });
+
+      const woodMat = new THREE.MeshStandardMaterial({
+        map: woodTex,
+        roughness: 0.62,
+        metalness: 0.04
+      });
+
+      const glassMat = new THREE.MeshPhysicalMaterial({
+        color: '#e0f2fe',
+        map: glassTex,
+        transparent: true,
+        opacity: 0.34,
+        roughness: 0.08,
+        metalness: 0.05,
+        side: THREE.DoubleSide
+      });
+
+      // ------------------------------------------------------------------------
+      // 1. ESTRUTURA METÁLICA ANTRACITE & PILARES COM ACABAMENTO EM MADEIRA
+      // ------------------------------------------------------------------------
+      const structureGroup = new THREE.Group();
+      structureGroup.name = 'Estrutura_Metalica';
+
+      const pillarPositions = [
+        { x: -1.65, z: -1.05, h: 2.68 },
+        { x: 2.15, z: -1.05, h: 2.68 },
+        { x: 2.15, z: 0.68, h: 2.82 },
+        { x: -1.65, z: 0.68, h: 2.82 }
+      ];
+
+      pillarPositions.forEach((p, i) => {
+        const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.13, p.h, 0.15), anthraciteMat);
+        pillar.position.set(p.x, 0.16 + p.h / 2, p.z);
+        pillar.castShadow = true;
+        pillar.receiveShadow = true;
+        pillar.name = `Pilar_Estrutural_${i + 1}`;
+        structureGroup.add(pillar);
+
+        // Detalhe vertical em madeira natural nos pilares frontais (fiel à pág. 16)
+        if (p.z > 0) {
+          const woodTrim = new THREE.Mesh(new THREE.BoxGeometry(0.04, p.h - 0.12, 0.11), woodMat);
+          woodTrim.position.set(p.x + (p.x > 0 ? 0.068 : -0.068), 0.16 + p.h / 2, p.z);
+          woodTrim.name = `Acabamento_Madeira_Pilar_${i + 1}`;
+          structureGroup.add(woodTrim);
+        }
+      });
+
+      // Vigas horizontais superiores e inferiores
+      const backBeamBottom = new THREE.Mesh(new THREE.BoxGeometry(3.92, 0.10, 0.12), anthraciteMat);
+      backBeamBottom.position.set(0.25, 0.21, -1.05);
+      structureGroup.add(backBeamBottom);
+
+      const backBeamTop = new THREE.Mesh(new THREE.BoxGeometry(3.92, 0.12, 0.14), anthraciteMat);
+      backBeamTop.position.set(0.25, 2.74, -1.05);
+      structureGroup.add(backBeamTop);
+
+      busStopGroup.add(structureGroup);
+
+      // ------------------------------------------------------------------------
+      // 2. PAREDES DE VIDRO TEMPERADO COM PONTOS DE SEGURANÇA
+      // ------------------------------------------------------------------------
+      const glassGroup = new THREE.Group();
+      glassGroup.name = 'Paredes_Vidro_Temperado';
+
+      // 3 painéis traseiros em vidro temperado
+      const backPaneWidths = [1.22, 1.22, 1.22];
+      backPaneWidths.forEach((w, idx) => {
+        const px = -1.0 + idx * 1.25;
+        const glassPane = new THREE.Mesh(new THREE.PlaneGeometry(w, 2.42), glassMat);
+        glassPane.position.set(px, 1.47, -1.05);
+        glassPane.name = `Vidro_Traseiro_${idx + 1}`;
+        glassGroup.add(glassPane);
+
+        // Montantes verticais finos entre vidros
+        if (idx < 2) {
+          const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.045, 2.46, 0.06), anthraciteMat);
+          mullion.position.set(px + 0.625, 1.47, -1.05);
+          glassGroup.add(mullion);
+        }
+      });
+
+      // Painel lateral direito superior em vidro (junto ao jardim vertical)
+      const sideGlass = new THREE.Mesh(new THREE.PlaneGeometry(1.58, 2.48), glassMat);
+      sideGlass.rotation.y = Math.PI / 2;
+      sideGlass.position.set(2.13, 1.50, -0.18);
+      sideGlass.name = 'Vidro_Lateral_Direito';
+      glassGroup.add(sideGlass);
+
+      busStopGroup.add(glassGroup);
+
+      // ------------------------------------------------------------------------
+      // 3. COBERTURA INCLINADA, FORRO DE MADEIRA & PAINÉIS SOLARES + TURBINA
+      // ------------------------------------------------------------------------
+      const roofGroup = new THREE.Group();
+      roofGroup.name = 'Cobertura_Solar';
+      roofGroup.position.set(0.0, 2.86, -0.15);
+      roofGroup.rotation.x = 0.075; // Ligeira inclinação para escoamento de água da chuva
+
+      // Estrutura exterior do teto
+      const roofShell = new THREE.Mesh(new THREE.BoxGeometry(4.95, 0.14, 2.28), anthraciteMat);
+      roofShell.castShadow = true;
+      roofShell.receiveShadow = true;
+      roofShell.name = 'Estrutura_Teto';
+      roofGroup.add(roofShell);
+
+      // Forro interior em ripas de madeira natural quente
+      const slatCount = 16;
+      for (let s = 0; s < slatCount; s++) {
+        const sz = -0.98 + (s * 1.96) / (slatCount - 1);
+        const slat = new THREE.Mesh(new THREE.BoxGeometry(4.65, 0.028, 0.085), woodMat);
+        slat.position.set(0.05, -0.075, sz);
+        slat.name = `Ripa_Madeira_Teto_${s + 1}`;
+        roofGroup.add(slat);
+      }
+
+      // Calhas LED lineares embutidas no teto de madeira
+      ceilingLedMat = new THREE.MeshStandardMaterial({
+        color: '#ffffff',
+        emissive: '#fde68a',
+        emissiveIntensity: 0.0,
+        roughness: 0.2
+      });
+
+      [-0.45, 0.45].forEach((lz, i) => {
+        const ledBar = new THREE.Mesh(new THREE.BoxGeometry(4.35, 0.02, 0.055), ceilingLedMat);
+        ledBar.position.set(0.05, -0.088, lz);
+        ledBar.name = `Calha_LED_Teto_${i + 1}`;
+        roofGroup.add(ledBar);
+      });
+
+      // Sensor de Presença/Movimento (PIR), Sensor de Luminosidade & Câmara de Vigilância
+      const sensorBodyMat = new THREE.MeshStandardMaterial({ color: '#0f172a', roughness: 0.3 });
+      const pirDomeMat = new THREE.MeshStandardMaterial({ color: '#e2e8f0', emissive: '#10b981', emissiveIntensity: 0.4 });
+      const pirSensor = new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), pirDomeMat);
+      pirSensor.position.set(0.15, -0.095, 0.85);
+      pirSensor.name = 'Sensor_Movimento_PIR';
+      roofGroup.add(pirSensor);
+
+      // Sensor de luminosidade ambiente no beiral superior
+      const ambientSensor = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.04, 12), sensorBodyMat);
+      ambientSensor.position.set(0.95, 0.08, 0.92);
+      ambientSensor.name = 'Sensor_Luminosidade_Ambiente';
+      roofGroup.add(ambientSensor);
+
+      // Câmara de monitorização inteligente (Pág. 16 & 19)
+      const camHousing = new THREE.Mesh(new THREE.SphereGeometry(0.055, 16, 16), aluminumMat);
+      camHousing.position.set(1.65, -0.10, 0.72);
+      camHousing.name = 'Camara_Monitorizacao_Seguranca';
+      roofGroup.add(camHousing);
+      const camLens = new THREE.Mesh(new THREE.SphereGeometry(0.028, 12, 12), sensorBodyMat);
+      camLens.position.set(1.65, -0.13, 0.74);
+      roofGroup.add(camLens);
+
+      // 3 Painéis Solares Monocristalinos Inclinados sobre a Cobertura
+      const solarArrayGroup = new THREE.Group();
+      solarArrayGroup.name = 'Paineis_Solares_Monocristalinos';
+      solarArrayGroup.position.set(0.05, 0.24, -0.05);
+      solarArrayGroup.rotation.x = 0.24; // Inclinação solar ótima
+
+      const solarFaceMat = new THREE.MeshStandardMaterial({
+        map: solarTex,
+        roughness: 0.18,
+        metalness: 0.65
+      });
+
+      for (let p = 0; p < 3; p++) {
+        const px = -1.48 + p * 1.48;
+        // Moldura alumínio
+        const frame = new THREE.Mesh(new THREE.BoxGeometry(1.38, 0.045, 1.56), aluminumMat);
+        frame.position.set(px, 0, 0);
+        frame.castShadow = true;
+        frame.name = `Moldura_Painel_Solar_${p + 1}`;
+        solarArrayGroup.add(frame);
+
+        // Superfície fotovoltaica
+        const pvCells = new THREE.Mesh(new THREE.PlaneGeometry(1.31, 1.49), solarFaceMat);
+        pvCells.rotation.x = -Math.PI / 2;
+        pvCells.position.set(px, 0.024, 0);
+        pvCells.name = `Celulas_Solares_${p + 1}`;
+        solarArrayGroup.add(pvCells);
+      }
+
+      // Suportes traseiros dos painéis solares
+      [-1.48, 0, 1.48].forEach(sx => {
+        const strut = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.34, 0.06), anthraciteMat);
+        strut.position.set(sx, -0.16, -0.55);
+        solarArrayGroup.add(strut);
+      });
+
+      roofGroup.add(solarArrayGroup);
+      explodedParts.push({ mesh: solarArrayGroup, offset: new THREE.Vector3(0, 0.65, 0) });
+
+      // Pequena Turbina Eólica de Eixo Vertical no topo (presente nos renders GREELING)
+      const windMast = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.04, 0.95, 12), anthraciteMat);
+      windMast.position.set(2.15, 0.52, -0.75);
+      windMast.name = 'Mastro_Micro_Eolica';
+      roofGroup.add(windMast);
+
+      windTurbineRotor = new THREE.Group();
+      windTurbineRotor.position.set(2.15, 0.88, -0.75);
+      windTurbineRotor.name = 'Turbina_Eolica_Vertical';
+      for (let b = 0; b < 3; b++) {
+        const angle = (b * Math.PI * 2) / 3;
+        const bladeGroup = new THREE.Group();
+        bladeGroup.rotation.y = angle;
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.52, 0.07), aluminumMat);
+        blade.position.set(0.18, 0, 0);
+        const armTop = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.018, 0.02), anthraciteMat);
+        armTop.position.set(0.09, 0.16, 0);
+        const armBot = armTop.clone();
+        armBot.position.set(0.09, -0.16, 0);
+        bladeGroup.add(blade, armTop, armBot);
+        windTurbineRotor.add(bladeGroup);
+      }
+      roofGroup.add(windTurbineRotor);
+
+      busStopGroup.add(roofGroup);
+
+      // ------------------------------------------------------------------------
+      // 4. LETREIRO LED HORIZONTAL SUPERIOR (Interior do Abrigo)
+      // ------------------------------------------------------------------------
+      initHeaderLedCanvas();
+      const headerBox = new THREE.Mesh(new THREE.BoxGeometry(2.75, 0.28, 0.12), anthraciteMat);
+      headerBox.position.set(0.25, 2.48, -0.94);
+      headerBox.name = 'Caixa_Letreiro_LED_Superior';
+      busStopGroup.add(headerBox);
+
+      const headerScreenMat = new THREE.MeshBasicMaterial({ map: headerLedTexture });
+      const headerScreen = new THREE.Mesh(new THREE.PlaneGeometry(2.65, 0.22), headerScreenMat);
+      headerScreen.position.set(0.25, 2.48, -0.878);
+      headerScreen.name = 'Ecra_LED_Horario_Superior';
+      busStopGroup.add(headerScreen);
+
+      // ------------------------------------------------------------------------
+      // 5. JARDIM VERTICAL ("PARAGEM VIVA") & SISTEMA HÍDRICO PLUVIAL
+      // ------------------------------------------------------------------------
+      const greenWallGroup = new THREE.Group();
+      greenWallGroup.name = 'Jardim_Vertical_Paragem_Viva';
+
+      // Caixa de suporte lateral direita
+      const planterBox = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.38, 1.56), anthraciteMat);
+      planterBox.position.set(2.24, 1.48, -0.18);
+      planterBox.castShadow = true;
+      planterBox.name = 'Estrutura_Jardim_Vertical';
+      greenWallGroup.add(planterBox);
+
+      // Tapete base de musgo e líquenes
+      const mossBaseMat = new THREE.MeshStandardMaterial({ color: '#2d5a27', roughness: 0.95 });
+      const mossOuter = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.28, 1.48), mossBaseMat);
+      mossOuter.position.set(2.31, 1.48, -0.18);
+      mossOuter.name = 'Substrato_Musgo_Exterior';
+      greenWallGroup.add(mossOuter);
+
+      const mossInner = new THREE.Mesh(new THREE.BoxGeometry(0.05, 2.28, 1.48), mossBaseMat);
+      mossInner.position.set(2.17, 1.48, -0.18);
+      mossInner.name = 'Substrato_Musgo_Interior';
+      greenWallGroup.add(mossInner);
+
+      // Folhagem 3D orgânica (musgo, líquenes, fetos e trepadeiras)
+      const foliageColors = ['#15803d', '#16a34a', '#4d7c0f', '#65a30d', '#22c55e', '#3f6212'];
+      const foliageMats = foliageColors.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 }));
+      const leafClusterGeo = new THREE.DodecahedronGeometry(0.085, 1);
+
+      for (let f = 0; f < 130; f++) {
+        const fy = 0.38 + Math.random() * 2.18;
+        const fz = -0.88 + Math.random() * 1.38;
+        const side = f % 2 === 0 ? 2.34 : 2.14;
+        const mat = foliageMats[f % foliageMats.length];
+        const cluster = new THREE.Mesh(leafClusterGeo, mat);
+        cluster.position.set(side + (Math.random() - 0.5) * 0.04, fy, fz);
+        cluster.scale.set(0.65 + Math.random() * 0.4, 0.8 + Math.random() * 0.7, 0.8 + Math.random() * 0.7);
+        cluster.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+        cluster.castShadow = true;
+        greenWallGroup.add(cluster);
+      }
+
+      // Trepadeiras a contornar o topo e pilar direito (inspirado na página 20)
+      for (let v = 0; v < 26; v++) {
+        const vx = 1.4 + v * 0.045;
+        const vy = 2.68 + Math.sin(v * 0.6) * 0.08;
+        const vine = new THREE.Mesh(leafClusterGeo, foliageMats[v % foliageMats.length]);
+        vine.position.set(vx, vy, 0.78);
+        vine.scale.set(0.8, 0.6, 0.8);
+        greenWallGroup.add(vine);
+      }
+
+      // Tubos horizontais de rega por gotejamento + Sensor de Humidade do Solo
+      const dripPipeMat = new THREE.MeshStandardMaterial({ color: '#0f172a', roughness: 0.4 });
+      [0.85, 1.45, 2.05].forEach((dy, i) => {
+        const dripPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 1.48, 8), dripPipeMat);
+        dripPipe.rotation.x = Math.PI / 2;
+        dripPipe.position.set(2.35, dy, -0.18);
+        dripPipe.name = `Tubo_Rega_Gotejamento_${i + 1}`;
+        greenWallGroup.add(dripPipe);
+      });
+
+      // Sensor de humidade do solo com LED azul
+      const soilSensor = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.14, 0.06), anthraciteMat);
+      soilSensor.position.set(2.36, 1.18, 0.35);
+      soilSensor.name = 'Sensor_Humidade_Solo';
+      greenWallGroup.add(soilSensor);
+
+      // Calha de recolha de água da chuva + Tubo descendente + Reservatório translúcido + Bomba Solar
+      const gutter = new THREE.Mesh(new THREE.BoxGeometry(4.85, 0.08, 0.10), aluminumMat);
+      gutter.position.set(0.05, 2.66, -1.24);
+      gutter.name = 'Calha_Recolha_Agua_Chuva';
+      greenWallGroup.add(gutter);
+
+      const downPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 2.15, 12), aluminumMat);
+      downPipe.position.set(2.42, 1.58, -1.16);
+      downPipe.name = 'Tubo_Descida_Pluvial';
+      greenWallGroup.add(downPipe);
+
+      // Reservatório lateral translúcido de água da chuva
+      const tankGlassMat = new THREE.MeshPhysicalMaterial({
+        color: '#e0f2fe',
+        transparent: true,
+        opacity: 0.42,
+        roughness: 0.15
+      });
+      const waterTank = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.56, 0.42), tankGlassMat);
+      waterTank.position.set(2.44, 0.45, -0.95);
+      waterTank.name = 'Reservatorio_Agua_Chuva';
+      greenWallGroup.add(waterTank);
+
+      // Água visível dentro do reservatório
+      const waterMat = new THREE.MeshStandardMaterial({
+        color: '#0ea5e9',
+        transparent: true,
+        opacity: 0.72,
+        roughness: 0.1
+      });
+      waterLevelMesh = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.38, 0.38), waterMat);
+      waterLevelMesh.position.set(2.44, 0.37, -0.95);
+      waterLevelMesh.name = 'Nivel_Agua_Reservatorio';
+      greenWallGroup.add(waterLevelMesh);
+
+      // Bomba de rega com mini painel solar dedicado (fiel à página 20)
+      const pumpBox = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.22), anthraciteMat);
+      pumpBox.position.set(2.44, 0.25, -0.58);
+      pumpBox.name = 'Bomba_Rega_Automatica';
+      greenWallGroup.add(pumpBox);
+
+      const miniSolar = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.02, 0.20), solarFaceMat);
+      miniSolar.position.set(2.44, 0.42, -0.56);
+      miniSolar.rotation.x = 0.45;
+      miniSolar.name = 'Mini_Painel_Solar_Rega';
+      greenWallGroup.add(miniSolar);
+
+      busStopGroup.add(greenWallGroup);
+      explodedParts.push({ mesh: greenWallGroup, offset: new THREE.Vector3(0.55, 0, 0) });
+
+      // ------------------------------------------------------------------------
+      // 6. TOTEM DIGITAL VERTICAL (L7/A11) + MÓDULO USB-C/A + COMPARTIMENTO TÉCNICO
+      // ------------------------------------------------------------------------
+      const totemGroup = new THREE.Group();
+      totemGroup.position.set(-2.25, 0.16, -0.15);
+      totemGroup.name = 'Totem_Digital_L7_A11';
+
+      // Chassi externo com material preparado para modo Raio-X
+      const totemShellMat = new THREE.MeshStandardMaterial({
+        color: '#181e24',
+        roughness: 0.38,
+        metalness: 0.75,
+        transparent: true,
+        opacity: 1.0
+      });
+      xrayMaterials.push(totemShellMat);
+
+      const totemBody = new THREE.Mesh(new THREE.BoxGeometry(0.86, 2.52, 0.48), totemShellMat);
+      totemBody.position.set(0, 1.26, 0);
+      totemBody.castShadow = true;
+      totemBody.receiveShadow = true;
+      totemBody.name = 'Corpo_Totem_Digital';
+      totemGroup.add(totemBody);
+
+      // Molduras laterais em madeira quente no totem (fiel à pág. 17)
+      [-0.445, 0.445].forEach((wx, idx) => {
+        const totemWood = new THREE.Mesh(new THREE.BoxGeometry(0.035, 2.48, 0.44), woodMat);
+        totemWood.position.set(wx, 1.26, 0);
+        totemWood.name = `Moldura_Madeira_Totem_${idx + 1}`;
+        totemGroup.add(totemWood);
+      });
+
+      // Pala superior do totem
+      const totemCap = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.08, 0.58), anthraciteMat);
+      totemCap.position.set(0, 2.55, 0.02);
+      totemCap.name = 'Topo_Totem_L7_A11';
+      totemGroup.add(totemCap);
+
+      // Ecrã Digital Vertical de Alta Resolução
+      initTotemScreenCanvas();
+      const screenMat = new THREE.MeshStandardMaterial({
+        map: totemScreenTexture,
+        emissiveMap: totemScreenTexture,
+        emissive: '#ffffff',
+        emissiveIntensity: 0.72,
+        roughness: 0.15
+      });
+
+      const totemScreenMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.74, 1.38), screenMat);
+      totemScreenMesh.position.set(0, 1.72, 0.244);
+      totemScreenMesh.name = 'Ecra_Digital_Totem_Interativo';
+      totemGroup.add(totemScreenMesh);
+
+      // --- MÓDULO ANTIVANDALISMO DE CARREGAMENTO USB-C (60W) E USB-A (18W) ---
+      const usbPanelGroup = new THREE.Group();
+      usbPanelGroup.position.set(0, 0.72, 0.244);
+      usbPanelGroup.name = 'Modulo_Carregamento_USB_Antivandalismo';
+
+      const usbPlateMat = new THREE.MeshStandardMaterial({ color: '#11161c', roughness: 0.35, metalness: 0.8 });
+      const usbPlate = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.42, 0.025), usbPlateMat);
+      usbPlate.name = 'Placa_Antivandalismo_USB';
+      usbPanelGroup.add(usbPlate);
+
+      const ledGreenMat = new THREE.MeshStandardMaterial({
+        color: '#22c55e',
+        emissive: '#10b981',
+        emissiveIntensity: 1.8
+      });
+
+      // 4 Portas USB-C (60W PD) superiores + 4 Portas USB-A (18W QC3.0) inferiores com tampas
+      for (let u = 0; u < 4; u++) {
+        const ux = -0.21 + u * 0.14;
+
+        // USB-C superior
+        const usbcHousing = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.10, 0.02), aluminumMat);
+        usbcHousing.position.set(ux, 0.09, 0.015);
+        usbPanelGroup.add(usbcHousing);
+
+        const usbcSlot = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.014, 0.01), sensorBodyMat);
+        usbcSlot.position.set(ux, 0.085, 0.026);
+        usbPanelGroup.add(usbcSlot);
+
+        const ledTop = new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 8), ledGreenMat);
+        ledTop.position.set(ux, 0.12, 0.026);
+        usbPanelGroup.add(ledTop);
+
+        // USB-A inferior com tampa protetora aberta
+        const usbaHousing = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.11, 0.02), aluminumMat);
+        usbaHousing.position.set(ux, -0.09, 0.015);
+        usbPanelGroup.add(usbaHousing);
+
+        const usbaCap = new THREE.Mesh(new THREE.BoxGeometry(0.082, 0.016, 0.055), aluminumMat);
+        usbaCap.position.set(ux, -0.03, 0.045);
+        usbaCap.rotation.x = -0.25;
+        usbPanelGroup.add(usbaCap);
+
+        const ledBot = new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 8), ledGreenMat);
+        ledBot.position.set(ux, -0.055, 0.026);
+        usbPanelGroup.add(ledBot);
+      }
+
+      totemGroup.add(usbPanelGroup);
+      explodedParts.push({ mesh: usbPanelGroup, offset: new THREE.Vector3(0, 0, 0.35) });
+
+      // Botão e Altifalante de Acessibilidade Sonora na face frontal/lateral do totem
+      const audioBtnGroup = new THREE.Group();
+      audioBtnGroup.position.set(0.24, 0.36, 0.245);
+      audioBtnGroup.name = 'Botao_Anuncio_Sonoro_Inclusivo';
+
+      const btnBezel = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.02, 20), anthraciteMat);
+      btnBezel.rotation.x = Math.PI / 2;
+      audioBtnGroup.add(btnBezel);
+
+      const btnPush = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.034, 0.034, 0.028, 20),
+        new THREE.MeshStandardMaterial({ color: '#eab308', emissive: '#ca8a04', emissiveIntensity: 0.4 })
+      );
+      btnPush.rotation.x = Math.PI / 2;
+      btnPush.position.z = 0.006;
+      btnPush.name = 'Botao_Fisico_Audio_Acessivel';
+      audioBtnGroup.add(btnPush);
+
+      totemGroup.add(audioBtnGroup);
+
+      // --- COMPARTIMENTO TÉCNICO INTERNO (Baterias LiFePO4 + Controlador MPPT) ---
+      const internalTechGroup = new THREE.Group();
+      internalTechGroup.name = 'Compartimento_Tecnico_Bateria_Controlador';
+
+      const lifepo4Mat = new THREE.MeshStandardMaterial({ color: '#059669', roughness: 0.4, metalness: 0.3 });
+      const copperMat = new THREE.MeshStandardMaterial({ color: '#d97706', roughness: 0.25, metalness: 0.9 });
+
+      // 4 Módulos de Bateria LiFePO4 empilhados na base interna do totem
+      for (let b = 0; b < 4; b++) {
+        const batCell = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.14, 0.30), lifepo4Mat);
+        batCell.position.set(0, 0.24 + b * 0.16, -0.02);
+        batCell.name = `Modulo_Bateria_LiFePO4_${b + 1}`;
+        internalTechGroup.add(batCell);
+
+        // Barramento de cobre
+        const busBar = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.02, 0.04), copperMat);
+        busBar.position.set(0, 0.315 + b * 0.16, 0.06);
+        internalTechGroup.add(busBar);
+      }
+
+      // Controlador Solar MPPT Inteligente acima das baterias
+      const mpptBox = new THREE.Mesh(
+        new THREE.BoxGeometry(0.44, 0.28, 0.16),
+        new THREE.MeshStandardMaterial({ color: '#334155', roughness: 0.3, metalness: 0.8 })
+      );
+      mpptBox.position.set(0, 1.05, -0.04);
+      mpptBox.name = 'Controlador_Carga_Solar_MPPT';
+      internalTechGroup.add(mpptBox);
+
+      const mpptScreen = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.18, 0.10),
+        new THREE.MeshBasicMaterial({ color: '#34d399' })
+      );
+      mpptScreen.position.set(0, 1.07, 0.042);
+      internalTechGroup.add(mpptScreen);
+
+      totemGroup.add(internalTechGroup);
+      explodedParts.push({ mesh: internalTechGroup, offset: new THREE.Vector3(-0.62, 0, -0.35) });
+
+      busStopGroup.add(totemGroup);
+
+      // ------------------------------------------------------------------------
+      // 7. BANCO TÉRMICO EM MADEIRA & CARREGAMENTO POR INDUÇÃO (Qi)
+      // ------------------------------------------------------------------------
+      const benchGroup = new THREE.Group();
+      benchGroup.position.set(0.25, 0.16, -0.72);
+      benchGroup.name = 'Banco_Isolamento_Termico';
+
+      // Consola estrutural oculta sob o assento (zero metal na área de contacto)
+      [-1.05, 0, 1.05].forEach((bx, idx) => {
+        const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.42, 0.44), anthraciteMat);
+        bracket.position.set(bx, 0.21, -0.08);
+        bracket.castShadow = true;
+        bracket.name = `Suporte_Banco_${idx + 1}`;
+        benchGroup.add(bracket);
+      });
+
+      // Ripas do assento em madeira natural com isolamento térmico
+      for (let r = 0; r < 4; r++) {
+        const plank = new THREE.Mesh(new THREE.BoxGeometry(2.85, 0.055, 0.115), woodMat);
+        plank.position.set(0, 0.44, -0.18 + r * 0.125);
+        plank.castShadow = true;
+        plank.receiveShadow = true;
+        plank.name = `Ripa_Assento_Termico_${r + 1}`;
+        benchGroup.add(plank);
+      }
+
+      // Apoio de braço ergonómico central (acessibilidade idosos)
+      const armrest = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.018, 10, 24, Math.PI), anthraciteMat);
+      armrest.rotation.y = Math.PI / 2;
+      armrest.position.set(0, 0.47, 0.02);
+      armrest.name = 'Apoio_Braco_Acessibilidade';
+      benchGroup.add(armrest);
+
+      // 2 Bases Circulares de Carregamento Sem Fios por Indução no banco
+      inductionLedMat = new THREE.MeshStandardMaterial({
+        color: '#10b981',
+        emissive: '#10b981',
+        emissiveIntensity: 1.4
+      });
+
+      [-1.12, 1.12].forEach((ix, idx) => {
+        const padBase = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.008, 24), anthraciteMat);
+        padBase.position.set(ix, 0.47, 0.02);
+        padBase.name = `Base_Carregamento_Inducao_${idx + 1}`;
+        benchGroup.add(padBase);
+
+        const padRing = new THREE.Mesh(new THREE.RingGeometry(0.052, 0.064, 24), inductionLedMat);
+        padRing.rotation.x = -Math.PI / 2;
+        padRing.position.set(ix, 0.475, 0.02);
+        benchGroup.add(padRing);
+      });
+
+      // Faixa LED sob o banco
+      benchLedMat = new THREE.MeshStandardMaterial({
+        color: '#ffffff',
+        emissive: '#fde68a',
+        emissiveIntensity: 0.0
+      });
+      const underBenchLed = new THREE.Mesh(new THREE.BoxGeometry(2.65, 0.02, 0.03), benchLedMat);
+      underBenchLed.position.set(0, 0.39, 0.14);
+      underBenchLed.name = 'Faixa_LED_Sob_Banco';
+      benchGroup.add(underBenchLed);
+
+      busStopGroup.add(benchGroup);
+
+      // ------------------------------------------------------------------------
+      // 8. FAIXA LED DE SEGURANÇA EMBUTIDA NO PAVIMENTO FRONTAL
+      // ------------------------------------------------------------------------
+      floorLedMat = new THREE.MeshStandardMaterial({
+        color: '#e2e8f0',
+        emissive: '#fef3c7',
+        emissiveIntensity: 0.0,
+        roughness: 0.25
+      });
+      const floorLedStrip = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.012, 0.07), floorLedMat);
+      floorLedStrip.position.set(0.0, 0.165, 0.92);
+      floorLedStrip.name = 'Faixa_LED_Seguranca_Pavimento';
+      busStopGroup.add(floorLedStrip);
+
+      // Onda visual de deteção do sensor de presença no pavimento
+      sensorRingMat = new THREE.MeshBasicMaterial({
+        color: '#10b981',
+        transparent: true,
+        opacity: 0.0,
+        side: THREE.DoubleSide
+      });
+      sensorWaveMesh = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.28, 36), sensorRingMat);
+      sensorWaveMesh.rotation.x = -Math.PI / 2;
+      sensorWaveMesh.position.set(0.15, 0.172, 0.45);
+      busStopGroup.add(sensorWaveMesh);
+
+      scene.add(busStopGroup);
+    }
+
+    /**
+     * ============================================================================
+     * HOTSPOTS 3D INTERATIVOS E CARTÃO TÉCNICO
+     * ============================================================================
+     */
+    function createHotspotPins() {
+      const layer = document.getElementById('hotspots-layer');
+      layer.innerHTML = '';
+
+      HOTSPOTS_DATA.forEach(item => {
+        const pin = document.createElement('div');
+        pin.className = 'hotspot-pin pointer-events-auto';
+        pin.id = `pin-${item.id}`;
+        pin.innerHTML = `
+          <div class="hotspot-dot">${item.num}</div>
+          <div class="hotspot-label">${item.title}</div>
+        `;
+        pin.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectHotspot(item.id);
+        });
+        layer.appendChild(pin);
+      });
+    }
+
+    function updateHotspotPositions() {
+      const layer = document.getElementById('hotspots-layer');
+      layer.style.display = appState.showHotspots ? 'block' : 'none';
+      if (!appState.showHotspots) return;
+
+      const widthHalf = window.innerWidth / 2;
+      const heightHalf = window.innerHeight / 2;
+
+      HOTSPOTS_DATA.forEach(item => {
+        const pin = document.getElementById(`pin-${item.id}`);
+        if (!pin) return;
+
+        const proj = item.pos3D.clone().project(camera);
+        const isBehind = proj.z > 1;
+
+        if (isBehind) {
+          pin.style.opacity = '0';
+          pin.style.pointerEvents = 'none';
+        } else {
+          const x = proj.x * widthHalf + widthHalf;
+          const y = -(proj.y * heightHalf) + heightHalf;
+          pin.style.left = `${x}px`;
+          pin.style.top = `${y}px`;
+          pin.style.opacity = '1';
+          pin.style.pointerEvents = 'auto';
+        }
+      });
+    }
+
+    function selectHotspot(id) {
+      const data = HOTSPOTS_DATA.find(h => h.id === id);
+      if (!data) return;
+
+      appState.selectedHotspotId = id;
+
+      // Atualiza estado visual dos pins
+      document.querySelectorAll('.hotspot-pin').forEach(p => p.classList.remove('active'));
+      const activePin = document.getElementById(`pin-${id}`);
+      if (activePin) activePin.classList.add('active');
+
+      // Se selecionou a bateria, ativa automaticamente vista Raio-X para inspecionar
+      if (id === 'bateria' && !appState.isExploded) {
+        toggleExplodedView(true);
+      }
+
+      // Move suavemente a câmara para o componente
+      if (data.camKey && CAMERA_PRESETS[data.camKey]) {
+        focusCamera(data.camKey);
+      }
+
+      // Preenche e mostra o cartão técnico
+      document.getElementById('card-badge').textContent = data.badge;
+      document.getElementById('card-title').textContent = data.title;
+      document.getElementById('card-desc').textContent = data.desc;
+      document.getElementById('card-cost').textContent = data.cost;
+      document.getElementById('card-ods').textContent = data.ods;
+
+      const specsEl = document.getElementById('card-specs');
+      specsEl.innerHTML = data.specs.map(s => `
+        <div class="flex items-start gap-2 text-[11px] text-slate-200 bg-white/5 rounded-xl px-2.5 py-1.5 border border-white/5">
+          <span class="text-emerald-400 font-bold mt-0.5">✓</span>
+          <span>${s}</span>
+        </div>
+      `).join('');
+
+      document.getElementById('info-card').classList.remove('hidden');
+    }
+
+    /**
+     * ============================================================================
+     * SIMULAÇÃO INTELIGENTE (DIA/NOITE, SENSOR DE PRESENÇA, ÁUDIO, RAIO-X)
+     * ============================================================================
+     */
+    function setDayNightMode(night) {
+      appState.isNight = night;
+
+      const btnDay = document.getElementById('btn-day');
+      const btnNight = document.getElementById('btn-night');
+
+      if (night) {
+        scene.background = new THREE.Color('#091018');
+        scene.fog = new THREE.FogExp2('#091018', 0.028);
+        hemiLight.intensity = 0.28;
+        hemiLight.color.set('#1e293b');
+        dirLight.intensity = 0.22;
+        dirLight.color.set('#93c5fd');
+
+        btnNight.className = 'py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-indigo-500/30 text-indigo-200 border border-indigo-400/40 transition cursor-pointer';
+        btnDay.className = 'py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 text-slate-400 hover:text-white transition cursor-pointer';
+
+        appState.solarWatts = 0;
+        document.getElementById('solar-watts').textContent = '0 W (Bateria)';
+        document.getElementById('solar-status-dot').className = 'w-2 h-2 rounded-full bg-indigo-400';
+      } else {
+        scene.background = new THREE.Color('#cce3de');
+        scene.fog = new THREE.FogExp2('#cce3de', 0.024);
+        hemiLight.intensity = 0.85;
+        hemiLight.color.set('#f0fdf4');
+        dirLight.intensity = 1.45;
+        dirLight.color.set('#fffbeb');
+
+        btnDay.className = 'py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 transition cursor-pointer';
+        btnNight.className = 'py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 text-slate-400 hover:text-white transition cursor-pointer';
+
+        appState.solarWatts = 680;
+        document.getElementById('solar-watts').textContent = '680 W';
+        document.getElementById('solar-status-dot').className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
+      }
+
+      updateLightingState();
+      updateHeaderLedCanvas();
+      updateTotemScreenCanvas();
+    }
+
+    function updateLightingState() {
+      const modeBadge = document.getElementById('lighting-mode-badge');
+      const presenceLabel = document.getElementById('presence-state-label');
+      const presenceDot = document.getElementById('presence-indicator');
+
+      if (!appState.isNight) {
+        // Durante o dia, o sensor de luminosidade ambiente mantém os LEDs principais desligados para poupar energia
+        ceilingLedMat.emissiveIntensity = 0.0;
+        benchLedMat.emissiveIntensity = 0.0;
+        floorLedMat.emissiveIntensity = 0.0;
+        shelterCeilingLight.intensity = 0.0;
+        floorLedLight.intensity = 0.0;
+        benchLedLight.intensity = 0.0;
+
+        modeBadge.textContent = appState.presenceDetected ? 'DIA • PIR ATIVO' : 'DIA (Sensor Luz)';
+        modeBadge.className = 'font-bold text-amber-300';
+        presenceLabel.textContent = appState.presenceDetected ? 'DETETADO' : 'STANDBY';
+        presenceDot.className = appState.presenceDetected ? 'w-2 h-2 rounded-full bg-emerald-400 animate-ping' : 'w-2 h-2 rounded-full bg-slate-500';
+      } else {
+        if (appState.presenceDetected) {
+          // MODO ATIVO 100% (Deteção de movimento à noite)
+          ceilingLedMat.emissiveIntensity = 2.6;
+          benchLedMat.emissiveIntensity = 2.2;
+          floorLedMat.emissiveIntensity = 2.8;
+          shelterCeilingLight.intensity = 2.2;
+          floorLedLight.intensity = 1.6;
+          benchLedLight.intensity = 1.1;
+
+          modeBadge.textContent = 'NOITE • ATIVO 100%';
+          modeBadge.className = 'font-bold text-emerald-300';
+          presenceLabel.textContent = '100% ATIVO';
+          presenceLabel.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40';
+          presenceDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-ping';
+        } else {
+          // MODO ECO 25% (Sem presença à noite)
+          ceilingLedMat.emissiveIntensity = 0.45;
+          benchLedMat.emissiveIntensity = 0.35;
+          floorLedMat.emissiveIntensity = 0.30;
+          shelterCeilingLight.intensity = 0.35;
+          floorLedLight.intensity = 0.15;
+          benchLedLight.intensity = 0.15;
+
+          modeBadge.textContent = 'NOITE • ECO 25%';
+          modeBadge.className = 'font-bold text-cyan-300';
+          presenceLabel.textContent = 'ECO 25%';
+          presenceLabel.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300';
+          presenceDot.className = 'w-2 h-2 rounded-full bg-cyan-400';
+        }
+      }
+    }
+
+    function togglePresenceSimulation() {
+      appState.presenceDetected = !appState.presenceDetected;
+      // Se ativar presença durante o dia, sugerimos automaticamente ver o efeito noturno ou mostramos aviso
+      if (appState.presenceDetected && !appState.isNight) {
+        setDayNightMode(true);
+        showToast('Modo Noite ativado automaticamente para demonstrar o Sensor PIR a 100%!');
+      } else {
+        updateLightingState();
+        showToast(
+          appState.presenceDetected
+            ? 'Sensor de Movimento PIR: Passageiro detetado → Iluminação a 100%!'
+            : 'Paragem vazia → Iluminação reduzida para Modo Eco (25%).'
+        );
+      }
+    }
+
+    function toggleTotemScreenView() {
+      appState.totemView = appState.totemView === 'buses' ? 'weather' : 'buses';
+      updateTotemScreenCanvas();
+      document.getElementById('totem-view-label').textContent =
+        appState.totemView === 'buses' ? 'Autocarros' : 'Qualidade do Ar';
+    }
+
+    function toggleExplodedView(forceState) {
+      appState.isExploded = typeof forceState === 'boolean' ? forceState : !appState.isExploded;
+      const btn = document.getElementById('btn-xray');
+      if (appState.isExploded) {
+        btn.classList.add('bg-purple-500/30', 'border-purple-400/60', 'text-purple-200');
+        showToast('Vista Explodida / Raio-X: Baterias LiFePO4 e Controlador MPPT visíveis.');
+      } else {
+        btn.classList.remove('bg-purple-500/30', 'border-purple-400/60', 'text-purple-200');
+      }
+    }
+
+    // Anúncio Sonoro Acessível (Web Audio Chime + Síntese de Voz PT-PT)
+    function triggerAccessibleAudioAnnouncement() {
+      const banner = document.getElementById('audio-banner');
+      banner.classList.remove('hidden');
+      banner.classList.add('flex');
+
+      // Sinal acústico suave gerado por Web Audio API (sem ficheiros externos)
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AudioCtx();
+        const now = ctx.currentTime;
+        [523.25, 659.25, 783.99].forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.14);
+          gain.gain.setValueAtTime(0.08, now + idx * 0.14);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.14 + 0.35);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + idx * 0.14);
+          osc.stop(now + idx * 0.14 + 0.36);
+        });
+      } catch (e) {
+        // Silencioso caso o navegador restrinja áudio
+      }
+
+      // Síntese de voz em Português de Portugal
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(
+          'Paragem Inteligente Greeling. Próximo autocarro: Linha 4, chega dentro de 3 minutos, lotação 45 por cento, livre.'
+        );
+        utterance.lang = 'pt-PT';
+        utterance.rate = 1.02;
+        utterance.onend = () => {
+          setTimeout(() => {
+            banner.classList.add('hidden');
+            banner.classList.remove('flex');
+          }, 1500);
+        };
+        window.speechSynthesis.speak(utterance);
+      }
+
+      setTimeout(() => {
+        banner.classList.add('hidden');
+        banner.classList.remove('flex');
+      }, 6500);
+    }
+
+    function focusCamera(presetKey) {
+      const preset = CAMERA_PRESETS[presetKey];
+      if (!preset) return;
+
+      targetCamPos.copy(preset.pos);
+      targetLookAt.copy(preset.target);
+      isCameraAnimating = true;
+
+      document.querySelectorAll('.cam-btn').forEach(btn => {
+        if (btn.dataset.cam === presetKey) {
+          btn.className = 'cam-btn active px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500 text-slate-950 transition whitespace-nowrap cursor-pointer';
+        } else {
+          btn.className = 'cam-btn px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition whitespace-nowrap cursor-pointer';
+        }
+      });
+    }
+
+    /**
+     * ============================================================================
+     * EXPORTAÇÃO PARA WAVEFRONT .OBJ (Compatível com Blender)
+     * ============================================================================
+     */
+    function exportSceneToOBJ() {
+      showToast('A gerar geometria 3D para ficheiro .OBJ...');
+
+      setTimeout(() => {
+        try {
+          busStopGroup.updateMatrixWorld(true);
+
+          let output = '# GREELING - Paragem de Autocarro Inteligente 3D (L7/A11 Smart Energy)\n';
+          output += '# Projeto Cidade Sustentavel - Exportado para Blender\n\n';
+
+          let vertexOffset = 1;
+          let normalOffset = 1;
+
+          const v = new THREE.Vector3();
+          const n = new THREE.Vector3();
+          const normalMatrix = new THREE.Matrix3();
+
+          busStopGroup.traverse((child) => {
+            if (!child.isMesh || !child.geometry) return;
+            // Ignora a onda plana auxiliar do sensor
+            if (child === sensorWaveMesh) return;
+
+            const geo = child.geometry;
+            const posAttr = geo.attributes.position;
+            if (!posAttr) return;
+
+            const normAttr = geo.attributes.normal;
+            const indexAttr = geo.index;
+
+            const objName = (child.name || 'Componente_Greeling').replace(/\s+/g, '_');
+            output += `g ${objName}\n`;
+            output += `o ${objName}\n`;
+
+            normalMatrix.getNormalMatrix(child.matrixWorld);
+
+            // Exporta vértices transformados em coordenadas globais
+            for (let i = 0; i < posAttr.count; i++) {
+              v.fromBufferAttribute(posAttr, i).applyMatrix4(child.matrixWorld);
+              output += `v ${v.x.toFixed(5)} ${v.y.toFixed(5)} ${v.z.toFixed(5)}\n`;
+            }
+
+            // Exporta normais
+            if (normAttr) {
+              for (let i = 0; i < normAttr.count; i++) {
+                n.fromBufferAttribute(normAttr, i).applyMatrix3(normalMatrix).normalize();
+                output += `vn ${n.x.toFixed(5)} ${n.y.toFixed(5)} ${n.z.toFixed(5)}\n`;
+              }
+            }
+
+            // Exporta faces trianguladas
+            if (indexAttr) {
+              for (let i = 0; i < indexAttr.count; i += 3) {
+                const a = indexAttr.getX(i) + vertexOffset;
+                const b = indexAttr.getX(i + 1) + vertexOffset;
+                const c = indexAttr.getX(i + 2) + vertexOffset;
+                if (normAttr) {
+                  const na = indexAttr.getX(i) + normalOffset;
+                  const nb = indexAttr.getX(i + 1) + normalOffset;
+                  const nc = indexAttr.getX(i + 2) + normalOffset;
+                  output += `f ${a}//${na} ${b}//${nb} ${c}//${nc}\n`;
+                } else {
+                  output += `f ${a} ${b} ${c}\n`;
+                }
+              }
+            } else {
+              for (let i = 0; i < posAttr.count; i += 3) {
+                const a = i + vertexOffset;
+                const b = i + 1 + vertexOffset;
+                const c = i + 2 + vertexOffset;
+                if (normAttr) {
+                  output += `f ${a}//${a} ${b}//${b} ${c}//${c}\n`;
+                } else {
+                  output += `f ${a} ${b} ${c}\n`;
+                }
+              }
+            }
+
+            output += '\n';
+            vertexOffset += posAttr.count;
+            if (normAttr) normalOffset += normAttr.count;
+          });
+
+          const blob = new Blob([output], { type: 'text/plain;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'GREELING_Paragem_Inteligente_3D.obj';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+
+          showToast('GREELING_Paragem_Inteligente_3D.obj descarregado com sucesso!');
+        } catch (err) {
+          showToast('Erro ao exportar ficheiro .OBJ.');
+        }
+      }, 60);
+    }
+
+    let toastTimeout;
+    function showToast(msg) {
+      const box = document.getElementById('toast-box');
+      document.getElementById('toast-message').textContent = msg;
+      box.classList.remove('translate-y-6', 'opacity-0');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        box.classList.add('translate-y-6', 'opacity-0');
+      }, 3400);
+    }
+
+    /**
+     * ============================================================================
+     * EVENTOS DE INTERFACE E RAYCASTING 3D
+     * ============================================================================
+     */
+    function bindUIEvents() {
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      document.getElementById('btn-day').addEventListener('click', () => setDayNightMode(false));
+      document.getElementById('btn-night').addEventListener('click', () => setDayNightMode(true));
+      document.getElementById('btn-presence').addEventListener('click', togglePresenceSimulation);
+      document.getElementById('btn-totem-screen').addEventListener('click', toggleTotemScreenView);
+      document.getElementById('btn-audio-announce').addEventListener('click', triggerAccessibleAudioAnnouncement);
+      document.getElementById('btn-xray').addEventListener('click', () => toggleExplodedView());
+      document.getElementById('btn-export-obj').addEventListener('click', exportSceneToOBJ);
+
+      document.getElementById('btn-toggle-hotspots').addEventListener('click', (e) => {
+        appState.showHotspots = !appState.showHotspots;
+        e.currentTarget.classList.toggle('opacity-50', !appState.showHotspots);
+      });
+
+      // Minimizar/expandir painel esquerdo
+      document.getElementById('toggle-sim-panel').addEventListener('click', (e) => {
+        const body = document.getElementById('sim-panel-body');
+        const hidden = body.classList.toggle('hidden');
+        e.currentTarget.textContent = hidden ? '+' : '−';
+      });
+
+      // Fechar cartão técnico
+      document.getElementById('close-info-card').addEventListener('click', () => {
+        document.getElementById('info-card').classList.add('hidden');
+        document.querySelectorAll('.hotspot-pin').forEach(p => p.classList.remove('active'));
+        appState.selectedHotspotId = null;
+      });
+
+      // Modal Orçamento
+      const budgetModal = document.getElementById('budget-modal');
+      document.getElementById('btn-budget').addEventListener('click', () => {
+        budgetModal.classList.remove('hidden');
+        budgetModal.classList.add('flex');
+      });
+      document.getElementById('close-budget-modal').addEventListener('click', () => {
+        budgetModal.classList.add('hidden');
+        budgetModal.classList.remove('flex');
+      });
+      budgetModal.addEventListener('click', (e) => {
+        if (e.target === budgetModal) {
+          budgetModal.classList.add('hidden');
+          budgetModal.classList.remove('flex');
+        }
+      });
+
+      // Botões de câmara
+      document.querySelectorAll('.cam-btn').forEach(btn => {
+        btn.addEventListener('click', () => focusCamera(btn.dataset.cam));
+      });
+
+      // Raycasting para clicar diretamente no ecrã do totem ou no botão sonoro 3D
+      let downPos = { x: 0, y: 0 };
+      renderer.domElement.addEventListener('pointerdown', (e) => {
+        downPos = { x: e.clientX, y: e.clientY };
+      });
+
+      renderer.domElement.addEventListener('pointerup', (e) => {
+        const dist = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
+        if (dist > 6) return; // Ignora se foi rotação de câmara
+
+        pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+        pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(pointer, camera);
+
+        const intersects = raycaster.intersectObjects(busStopGroup.children, true);
+        if (intersects.length > 0) {
+          const hitName = intersects[0].object.name;
+          if (hitName === 'Ecra_Digital_Totem_Interativo') {
+            toggleTotemScreenView();
+            showToast(`Ecrã Digital Totem: Vista ${appState.totemView === 'buses' ? 'Autocarros' : 'Qualidade do Ar'}`);
+          } else if (hitName === 'Botao_Fisico_Audio_Acessivel') {
+            triggerAccessibleAudioAnnouncement();
+          }
+        }
+      });
+    }
+
+    /**
+     * ============================================================================
+     * LOOP DE ANIMAÇÃO PRINCIPAL
+     * ============================================================================
+     */
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const elapsed = clock.getElapsedTime();
+
+      // Rotação suave da turbina eólica vertical no topo
+      if (windTurbineRotor) {
+        windTurbineRotor.rotation.y += 0.025;
+      }
+
+      // Pulso subtil nos anéis LED de carregamento por indução no banco
+      if (inductionLedMat) {
+        inductionLedMat.emissiveIntensity = 1.0 + Math.sin(elapsed * 3.0) * 0.45;
+      }
+
+      // Onda visual no pavimento quando o sensor de movimento deteta presença
+      if (sensorWaveMesh && sensorRingMat) {
+        if (appState.presenceDetected) {
+          const waveCycle = (elapsed * 1.4) % 1;
+          const scale = 1 + waveCycle * 5.5;
+          sensorWaveMesh.scale.set(scale, scale, 1);
+          sensorRingMat.opacity = (1 - waveCycle) * 0.55;
+        } else {
+          sensorRingMat.opacity = 0;
+        }
+      }
+
+      // Animação suave da Vista Explodida / Raio-X
+      const targetOpacity = appState.isExploded ? 0.22 : 1.0;
+      xrayMaterials.forEach(mat => {
+        mat.opacity += (targetOpacity - mat.opacity) * 0.1;
+      });
+
+      explodedParts.forEach(part => {
+        if (!part.basePos) part.basePos = part.mesh.position.clone();
+        const dest = appState.isExploded
+          ? part.basePos.clone().add(part.offset)
+          : part.basePos;
+        part.mesh.position.lerp(dest, 0.1);
+      });
+
+      // Interpolação suave das predefinições de câmara
+      if (isCameraAnimating) {
+        camera.position.lerp(targetCamPos, 0.075);
+        controls.target.lerp(targetLookAt, 0.075);
+        if (camera.position.distanceTo(targetCamPos) < 0.03 && controls.target.distanceTo(targetLookAt) < 0.03) {
+          isCameraAnimating = false;
+        }
+      }
+
+      controls.update();
+      updateHotspotPositions();
+      renderer.render(scene, camera);
+    }
+
+    // Inicia a aplicação após o carregamento completo da janela
+    window.onload = function () {
+      initScene();
+    };
+  </script>
+</body>
+</html>

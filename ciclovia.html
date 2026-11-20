@@ -1,0 +1,2268 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>GREELING — Ciclovia Fotovoltaica e Dinâmica 3D (L7/A11 Smart Energy)</title>
+
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Three.js r128 e OrbitControls via CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #080d12;
+      color: #f1f5f9;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+
+    /* Painéis HUD em vidro escuro GREELING */
+    .hud-glass {
+      background: rgba(15, 23, 42, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.48);
+    }
+
+    .hud-glass-emerald {
+      background: rgba(10, 22, 24, 0.84);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(16, 185, 129, 0.38);
+      box-shadow: 0 14px 38px rgba(0, 0, 0, 0.58);
+    }
+
+    /* Hotspots 3D projetados */
+    .hotspot-pin {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      z-index: 15;
+      cursor: pointer;
+      transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s ease;
+    }
+
+    .hotspot-pin:hover {
+      transform: translate(-50%, -50%) scale(1.14);
+      z-index: 25;
+    }
+
+    .hotspot-dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 9999px;
+      background: rgba(16, 185, 129, 0.94);
+      border: 2px solid #ffffff;
+      color: #042f2e;
+      font-weight: 800;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.25), 0 4px 12px rgba(0, 0, 0, 0.6);
+      position: relative;
+    }
+
+    .hotspot-dot::after {
+      content: '';
+      position: absolute;
+      inset: -5px;
+      border-radius: 9999px;
+      border: 1.5px solid rgba(16, 185, 129, 0.65);
+      animation: pulseRing 2.2s infinite ease-out;
+    }
+
+    .hotspot-pin.active .hotspot-dot {
+      background: #ffffff;
+      color: #065f46;
+      border-color: #10b981;
+      box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.45);
+    }
+
+    .hotspot-label {
+      position: absolute;
+      left: 34px;
+      top: 50%;
+      transform: translateY(-50%);
+      white-space: nowrap;
+      background: rgba(9, 14, 19, 0.9);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #ecfdf5;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 9px;
+      border-radius: 8px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .hotspot-pin:hover .hotspot-label,
+    .hotspot-pin.active .hotspot-label {
+      opacity: 1;
+    }
+
+    @keyframes pulseRing {
+      0% { transform: scale(0.9); opacity: 0.9; }
+      100% { transform: scale(1.65); opacity: 0; }
+    }
+
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.03);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(16, 185, 129, 0.35);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Contentor do Canvas 3D -->
+  <div id="canvas-container"></div>
+
+  <!-- Camada de Hotspots 3D -->
+  <div id="hotspots-layer" class="fixed inset-0 pointer-events-none z-10 overflow-hidden"></div>
+
+  <!-- Ecrã de Carregamento Inicial -->
+  <div id="loader-screen" class="fixed inset-0 z-50 bg-[#080d12] flex flex-col items-center justify-center transition-opacity duration-500">
+    <div class="w-16 h-16 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center mb-4 animate-pulse">
+      <svg class="w-9 h-9 text-emerald-400" viewBox="0 0 36 36" fill="none">
+        <path d="M18 3L5 9V18C5 26.2 10.5 33.6 18 35.5C25.5 33.6 31 26.2 31 18V9L18 3Z" stroke="currentColor" stroke-width="2.2" fill="rgba(16,185,129,0.12)"/>
+        <circle cx="13" cy="23" r="3.2" stroke="#34d399" stroke-width="1.8"/>
+        <circle cx="23" cy="23" r="3.2" stroke="#34d399" stroke-width="1.8"/>
+        <path d="M13 23L16.5 16H20.5L23 23M16.5 16L18 23" stroke="#6ee7b7" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <h1 class="text-lg font-bold tracking-wider text-white">GREELING <span class="text-emerald-400 font-normal">| CICLOVIA SOLAR 3D</span></h1>
+    <p class="text-xs text-slate-400 mt-1">A gerar pavimento fotovoltaico, túnel verde e sensores inteligentes...</p>
+  </div>
+
+  <!-- BARRA SUPERIOR (Identidade GREELING + Telemetria + Orçamento + Exportação .OBJ) -->
+  <header class="fixed top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+    <!-- Logótipo e Título -->
+    <div class="hud-glass rounded-2xl px-3.5 py-2.5 flex items-center gap-3 pointer-events-auto">
+      <div class="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center shrink-0">
+        <svg class="w-6 h-6 text-emerald-400" viewBox="0 0 36 36" fill="none">
+          <path d="M18 3L5 9V18C5 26.2 10.5 33.6 18 35.5C25.5 33.6 31 26.2 31 18V9L18 3Z" stroke="currentColor" stroke-width="2.2" fill="rgba(16,185,129,0.15)"/>
+          <circle cx="13" cy="23" r="3" stroke="#34d399" stroke-width="1.8"/>
+          <circle cx="23" cy="23" r="3" stroke="#34d399" stroke-width="1.8"/>
+          <path d="M13 23L16.5 16H20.5L23 23" stroke="#6ee7b7" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="font-extrabold tracking-wide text-sm sm:text-base text-white">GREELING</span>
+          <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+            Ciclovia Fotovoltaica
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-400 hidden sm:block">L7/A11 Smart Energy • Mobilidade Sustentável & Infraestrutura Verde</p>
+      </div>
+
+      <!-- Badges ODS -->
+      <div class="hidden xl:flex items-center gap-1.5 ml-2 pl-3 border-l border-white/10">
+        <span title="ODS 7: Energia Limpa e Acessível" class="px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] font-bold">ODS 7</span>
+        <span title="ODS 11: Cidades e Comunidades Sustentáveis" class="px-2 py-1 rounded-lg bg-orange-500/20 border border-orange-400/40 text-orange-300 text-[10px] font-bold">ODS 11</span>
+        <span title="ODS 13: Ação Climática" class="px-2 py-1 rounded-lg bg-emerald-600/25 border border-emerald-400/40 text-emerald-300 text-[10px] font-bold">ODS 13</span>
+      </div>
+    </div>
+
+    <!-- Telemetria e Botões Principais -->
+    <div class="flex items-center gap-2 pointer-events-auto">
+      <!-- Telemetria em Tempo Real -->
+      <div class="hud-glass rounded-2xl px-3 py-2 hidden lg:flex items-center gap-3 text-xs">
+        <div class="flex items-center gap-1.5">
+          <span id="solar-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+          <span class="text-slate-400">Pavimento Solar:</span>
+          <span id="solar-power-label" class="font-bold text-amber-300">12,4 kW</span>
+        </div>
+        <div class="w-px h-4 bg-white/10"></div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-slate-400">Ciclistas Hoje:</span>
+          <span id="hud-cyclist-count" class="font-bold text-emerald-400">1.489</span>
+        </div>
+        <div class="w-px h-4 bg-white/10"></div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-slate-400">Conforto Túnel:</span>
+          <span id="hud-tunnel-temp" class="font-bold text-cyan-300">-3,8°C</span>
+        </div>
+      </div>
+
+      <!-- Botão Ficha Técnica & Orçamento (500m) -->
+      <button id="btn-budget" class="hud-glass hover:border-emerald-400/50 text-slate-200 hover:text-white rounded-2xl px-3 py-2.5 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
+        <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+        </svg>
+        <span class="hidden sm:inline">Orçamento (500m)</span>
+        <span class="text-emerald-400 font-bold">159.100 €</span>
+      </button>
+
+      <!-- Botão Exportar .OBJ -->
+      <button id="btn-export-obj" class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-2xl px-3.5 py-2.5 text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-950/50 border border-emerald-400/30 transition cursor-pointer">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3"/>
+        </svg>
+        <span>Exportar .OBJ</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- PAINEL DE CONTROLO ESQUERDO (Colapsável) -->
+  <aside id="sim-panel" class="fixed left-3 top-20 z-20 w-64 sm:w-72 hud-glass rounded-2xl p-3.5 transition-all duration-300">
+    <div class="flex items-center justify-between mb-2.5">
+      <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        Controlos & Simulação
+      </span>
+      <button id="toggle-sim-panel" class="text-slate-400 hover:text-white text-xs px-2 py-0.5 rounded-lg hover:bg-white/10 cursor-pointer" title="Minimizar/Expandir">
+        −
+      </button>
+    </div>
+
+    <div id="sim-panel-body" class="space-y-2">
+      <!-- Alternância Dia / Noite -->
+      <div class="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-black/40 border border-white/5">
+        <button id="btn-day" class="py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 transition cursor-pointer">
+          <svg class="w-3.5 h-3.5 text-amber-300" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/></svg>
+          Dia
+        </button>
+        <button id="btn-night" class="py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 text-slate-400 hover:text-white transition cursor-pointer">
+          <svg class="w-3.5 h-3.5 text-indigo-300" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>
+          Noite
+        </button>
+      </div>
+
+      <!-- Ciclista (Sensor PIR & LEDs Dinâmicos) -->
+      <button id="btn-cyclist" class="w-full py-2 px-3 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-left text-xs font-medium flex items-center justify-between transition cursor-pointer">
+        <span class="flex items-center gap-2 text-emerald-100">
+          <span id="cyclist-dot" class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          <span>Ciclista (Sensor PIR)</span>
+        </span>
+        <span id="cyclist-badge" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40">ATIVO</span>
+      </button>
+
+      <!-- Simular Chuva & Drenagem Inteligente -->
+      <button id="btn-rain" class="w-full py-2 px-3 rounded-xl bg-white/5 hover:bg-cyan-500/20 border border-white/10 hover:border-cyan-400/40 text-left text-xs font-medium flex items-center justify-between transition cursor-pointer">
+        <span class="flex items-center gap-2">
+          <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/><path stroke-linecap="round" stroke-linejoin="round" d="M8 19v2m4-2v2m4-2v2"/></svg>
+          <span>Simular Chuva</span>
+        </span>
+        <span id="rain-badge" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">OFF</span>
+      </button>
+
+      <!-- Vista Raio-X / Subterrânea -->
+      <div class="pt-1 border-t border-white/10 flex items-center justify-between gap-2">
+        <button id="btn-xray" class="flex-1 py-2 px-2.5 rounded-xl bg-white/5 hover:bg-purple-500/20 border border-white/10 hover:border-purple-400/40 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer">
+          <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m-2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l-2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l-2-1v-2.5"/></svg>
+          <span>Vista Raio-X</span>
+        </button>
+
+        <button id="btn-toggle-hotspots" class="py-2 px-2.5 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-xs font-semibold transition cursor-pointer" title="Mostrar/Ocultar Pontos Técnicos">
+          Pins
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- CARTÃO TÉCNICO DO COMPONENTE SELECIONADO (Direita) -->
+  <section id="info-card" class="fixed right-3 top-20 z-20 w-80 sm:w-96 hud-glass-emerald rounded-2xl p-4 hidden transition-all duration-300 max-h-[72vh] overflow-y-auto">
+    <div class="flex items-start justify-between gap-2">
+      <div>
+        <span id="card-badge" class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+          Infraestrutura Verde
+        </span>
+        <h2 id="card-title" class="text-base font-bold text-white mt-1.5">Pavimento Solar Antiderrapante</h2>
+      </div>
+      <button id="close-info-card" class="w-7 h-7 rounded-xl bg-white/5 hover:bg-white/15 flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer">
+        ✕
+      </button>
+    </div>
+
+    <p id="card-desc" class="text-xs text-slate-300 leading-relaxed mt-2.5"></p>
+    <div id="card-specs" class="mt-3 space-y-1.5"></div>
+
+    <div class="mt-4 pt-3 border-t border-emerald-500/20 flex items-center justify-between">
+      <div>
+        <span class="text-[10px] uppercase tracking-wider text-slate-400 block">Custo de Referência</span>
+        <span id="card-cost" class="text-sm font-extrabold text-emerald-400">400 € / m²</span>
+      </div>
+      <span id="card-ods" class="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+        ODS 7 • Energia Limpa
+      </span>
+    </div>
+  </section>
+
+  <!-- DRAWER / MODAL FICHA TÉCNICA & ORÇAMENTO (500m — 159.100 €) -->
+  <div id="budget-modal" class="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="hud-glass-emerald rounded-3xl max-w-lg w-full p-5 sm:p-6 max-h-[85vh] overflow-y-auto">
+      <div class="flex items-center justify-between pb-3 border-b border-white/10">
+        <div>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Custos de Material — Mobilidade Ciclovias</span>
+          <h3 class="text-lg font-extrabold text-white">Ficha Técnica & Orçamento (500m)</h3>
+        </div>
+        <button id="close-budget-modal" class="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white cursor-pointer">✕</button>
+      </div>
+
+      <div class="mt-3 divide-y divide-white/5 text-xs">
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Estação de Carregamento Solar</span><span class="font-bold text-white">4.000 €</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Bomba de Ar e Coluna de Ferramentas</span><span class="font-bold text-white">1.800 €</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Pavimento Solar Antiderrapante</span><span class="font-bold text-white">400 € / m²</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Iluminação LED Embutida Inteligente</span><span class="font-bold text-white">70 € / metro</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Contador Inteligente de Ciclistas</span><span class="font-bold text-white">5.500 €</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Estação de Sensores Ambientais</span><span class="font-bold text-white">2.800 €</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Estrutura de Túnel Verde</span><span class="font-bold text-white">200 € / metro</span></div>
+        <div class="py-2 flex justify-between"><span class="text-slate-300">Pavimento Permeável / Drenante</span><span class="font-bold text-white">60 € / m²</span></div>
+      </div>
+
+      <div class="mt-4 pt-3 border-t border-emerald-500/30 flex items-center justify-between">
+        <span class="text-xs text-slate-300 font-medium">TOTAL ESTIMADO (500m)</span>
+        <span class="text-xl font-extrabold text-emerald-400">159.100 €</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- BARRA INFERIOR DE PRESETS DE CÂMARA -->
+  <nav class="fixed bottom-3 left-3 right-3 z-20 flex flex-col items-center gap-2 pointer-events-none">
+    <div class="hud-glass rounded-2xl p-1.5 flex items-center gap-1 overflow-x-auto max-w-full pointer-events-auto">
+      <button data-cam="geral" class="cam-btn active px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500 text-slate-950 transition whitespace-nowrap cursor-pointer">
+        Vista Geral
+      </button>
+      <button data-cam="solar" class="cam-btn px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition whitespace-nowrap cursor-pointer">
+        Pavimento Solar & LED
+      </button>
+      <button data-cam="tunel" class="cam-btn px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition whitespace-nowrap cursor-pointer">
+        Túnel Verde
+      </button>
+      <button data-cam="ferramentas" class="cam-btn px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition whitespace-nowrap cursor-pointer">
+        Ferramentas & Carga
+      </button>
+      <button data-cam="sensores" class="cam-btn px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition whitespace-nowrap cursor-pointer">
+        Contador & Sensores Ar
+      </button>
+    </div>
+  </nav>
+
+  <!-- NOTIFICAÇÃO TOAST -->
+  <div id="toast-box" class="fixed bottom-16 right-4 z-50 hud-glass-emerald rounded-2xl px-4 py-3 text-xs text-white font-medium shadow-2xl transform translate-y-6 opacity-0 pointer-events-none transition-all duration-300 flex items-center gap-2.5">
+    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+    <span id="toast-message">Modelo exportado com sucesso!</span>
+  </div>
+
+  <script>
+    /**
+     * ============================================================================
+     * GREELING — CICLOVIA FOTOVOLTAICA E DINÂMICA 3D (L7/A11 SMART ENERGY)
+     * Modelo arquitetónico interativo baseado na apresentação "Cidade Sustentável"
+     * ============================================================================
+     */
+
+    const appState = {
+      isNight: false,
+      cyclistActive: true,
+      isRaining: false,
+      isXray: false,
+      showHotspots: true,
+      selectedHotspotId: null,
+      cyclistsToday: 1489,
+      cyclistsAnnual: 40125,
+      cyclistZ: -12.5,
+      lastLoopTrigger: false
+    };
+
+    // Dados técnicos dos pontos de interesse (fiéis às págs. 22–25 e 29)
+    const HOTSPOTS_DATA = [
+      {
+        id: 'pavimento',
+        num: '1',
+        title: 'Pavimento Solar Antiderrapante',
+        badge: 'Geração Fotovoltaica (ODS 7)',
+        pos3D: new THREE.Vector3(0.0, 0.25, -7.2),
+        camKey: 'solar',
+        cost: '400 € / m²',
+        ods: 'ODS 7 • Energia Limpa',
+        desc: 'Via ciclável de 3,2m de largura pavimentada com módulos fotovoltaicos transitáveis e vidro temperado antiderrapante, captando energia solar durante o dia para alimentar toda a rede autónoma.',
+        specs: [
+          'Células monocristalinas encapsuladas de alta resistência mecânica',
+          'Superfície texturizada antiderrapante mesmo sob chuva intensa',
+          'Alimenta a iluminação LED, estações de carga e sensores ambientais'
+        ]
+      },
+      {
+        id: 'leds',
+        num: '2',
+        title: 'Iluminação LED Embutida Inteligente',
+        badge: 'Eficiência Dinâmica (PIR)',
+        pos3D: new THREE.Vector3(-1.72, 0.24, -5.5),
+        camKey: 'solar',
+        cost: '70 € / metro',
+        ods: 'ODS 7 & 11 • Zero Poluição Luminosa',
+        desc: 'Faixas contínuas de LED embutidas à face dos lancis laterais e ligadas a sensores de movimento PIR: iluminam o trajeto a 100% à frente do ciclista e reduzem para 15% (Modo Eco) após a passagem.',
+        specs: [
+          'Onda luminosa progressiva acompanha a velocidade do ciclista',
+          'Reduz em até 85% a poluição luminosa noturna nos parques urbanos',
+          'Ative o modo "Noite" para observar a onda dinâmica em ação'
+        ]
+      },
+      {
+        id: 'drenagem',
+        num: '3',
+        title: 'Pavimento Permeável & Drenagem',
+        badge: 'Gestão Hídrica Inteligente',
+        pos3D: new THREE.Vector3(-2.05, 0.20, -2.0),
+        camKey: 'solar',
+        cost: '60 € / m²',
+        ods: 'ODS 13 • Adaptação Climática',
+        desc: 'Margens em pavimento poroso drenante com grelhas lineares que evitam poças de água na ciclovia e encaminham o escoamento pluvial para regar automaticamente os canteiros nativos.',
+        specs: [
+          'Evita acumulação de água e aquaplanagem na via ciclável',
+          'Tubagens perfuradas subterrâneas irrigam os jardins de chuva laterais',
+          'Clique em "Simular Chuva" e "Vista Raio-X" para ver o fluxo subterrâneo'
+        ]
+      },
+      {
+        id: 'tunel',
+        num: '4',
+        title: 'Túnel Verde (Conforto Térmico)',
+        badge: 'Cobertura Vegetal (ODS 11 & 13)',
+        pos3D: new THREE.Vector3(0.0, 3.15, 5.5),
+        camKey: 'tunel',
+        cost: '200 € / metro',
+        ods: 'ODS 13 • Arrefecimento Urbano',
+        desc: 'Arcos estruturais em aço tubular e madeira cobertos por plantas trepadeiras nativas e glicínias roxas, criando sombra natural contra o sol forte e reduzindo a temperatura local até 3,8°C.',
+        specs: [
+          'Reduz o efeito de ilha de calor nos dias de verão',
+          'Promove corredores ecológicos para polinizadores urbanos',
+          'Sombra filtrada mantém conforto térmico sem bloquear a ventilação'
+        ]
+      },
+      {
+        id: 'ferramentas',
+        num: '5',
+        title: 'Bomba de Ar & Coluna de Ferramentas',
+        badge: 'Autosserviço Gratuito',
+        pos3D: new THREE.Vector3(2.85, 1.55, -3.5),
+        camKey: 'ferramentas',
+        cost: '1.800 €',
+        ods: 'ODS 11 • Mobilidade Suave',
+        desc: 'Coluna de autosserviço Greeling alimentada a energia solar com bomba de ar automática, manómetro digital e kit completo de ferramentas presas por cabos de aço inoxidável.',
+        specs: [
+          'Bomba de ar elétrica solar com manómetro digital de precisão',
+          'Chaves de bocas, chaves de fendas, sextavadas e desmonta-pneus',
+          'Iluminação LED direcionada para reparações noturnas'
+        ]
+      },
+      {
+        id: 'carregamento',
+        num: '6',
+        title: 'Estação de Carregamento Solar',
+        badge: 'Energia para E-Bikes & Telemóveis',
+        pos3D: new THREE.Vector3(2.85, 1.45, -5.3),
+        camKey: 'ferramentas',
+        cost: '4.000 €',
+        ods: 'ODS 7 • Energia Acessível',
+        desc: 'Totem solar autónomo equipado com 4 portas USB-C (60W PD), 4 USB-A (18W QC3.0) protegidas contra vandalismo e tomadas para bicicletas e trotinetes elétricas urbanas.',
+        specs: [
+          'Painel solar dedicado no topo + ligação ao banco subterrâneo LiFePO4',
+          'Indicadores LED verdes de disponibilidade energética',
+          'Permite recarregar bicicletas elétricas e dispositivos móveis gratuitamente'
+        ]
+      },
+      {
+        id: 'sensores',
+        num: '7',
+        title: 'Contador de Ciclistas & Qualidade do Ar',
+        badge: 'Dados em Tempo Real (IoT)',
+        pos3D: new THREE.Vector3(-2.15, 1.55, -10.8),
+        camKey: 'sensores',
+        cost: '5.500 € (Contador) + 2.800 € (Ar)',
+        ods: 'ODS 3, 7 & 11 • Cidade Inteligente',
+        desc: 'Displays digitais na entrada da ciclovia que contabilizam passagens via espira de indução no pavimento e monitorizam a qualidade do ar e temperatura, sugerindo rotas mais frescas.',
+        specs: [
+          'Espira de indução incrementa o contador a cada passagem do ciclista',
+          'Envio automático de estatísticas de mobilidade para a Câmara Municipal',
+          'Alerta de temperatura e recomendação de rotas frescas arborizadas'
+        ]
+      }
+    ];
+
+    // Predefinições suaves de câmara
+    const CAMERA_PRESETS = {
+      geral: { pos: new THREE.Vector3(-6.8, 4.4, -15.2), target: new THREE.Vector3(0.0, 1.2, -1.5) },
+      solar: { pos: new THREE.Vector3(-4.2, 2.2, -8.5), target: new THREE.Vector3(0.0, 0.35, -3.5) },
+      tunel: { pos: new THREE.Vector3(0.0, 2.35, -1.8), target: new THREE.Vector3(0.0, 1.85, 6.5) },
+      ferramentas: { pos: new THREE.Vector3(0.3, 1.85, -4.4), target: new THREE.Vector3(2.85, 1.25, -4.4) },
+      sensores: { pos: new THREE.Vector3(0.0, 1.85, -14.2), target: new THREE.Vector3(0.0, 1.35, -10.8) }
+    };
+
+    // Variáveis globais Three.js
+    let scene, camera, renderer, controls;
+    let cicloviaGroup;
+    let hemiLight, dirLight;
+    let cyclistGroup, frontWheel, rearWheel, pedalCrank, cyclistHeadlight, cyclistSpotLight;
+    let rainPoints, waterChannelMat;
+    let counterCanvas, counterCtx, counterTexture;
+    let airCanvas, airCtx, airTexture;
+    let inductionLoopMat;
+
+    const ledSegmentsLeft = [];
+    const ledSegmentsRight = [];
+    const gardenUplights = [];
+    const xrayShellMaterials = [];
+    let undergroundGroup;
+
+    let targetCamPos = CAMERA_PRESETS.geral.pos.clone();
+    let targetLookAt = CAMERA_PRESETS.geral.target.clone();
+    let isCameraAnimating = false;
+
+    /**
+     * ============================================================================
+     * TEXTURAS PROCEDIMENTAIS (CanvasTextures)
+     * ============================================================================
+     */
+
+    // 1. Textura do Pavimento Solar Fotovoltaico Antiderrapante (com sinalização de ciclovia)
+    function createSolarCyclePavementTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+
+      // Fundo monocristalino azul-grafite profundo
+      const grad = ctx.createLinearGradient(0, 0, 1024, 1024);
+      grad.addColorStop(0, '#0b192c');
+      grad.addColorStop(0.5, '#11243e');
+      grad.addColorStop(1, '#091526');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 1024, 1024);
+
+      // Grelha de células fotovoltaicas (12 colunas x 12 linhas por módulo)
+      const cols = 12;
+      const rows = 12;
+      const cw = 1024 / cols;
+      const ch = 1024 / rows;
+
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+      ctx.lineWidth = 2;
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const x = c * cw;
+          const y = r * ch;
+          ctx.strokeRect(x + 2, y + 2, cw - 4, ch - 4);
+
+          // Finos barramentos prateados
+          ctx.fillStyle = 'rgba(203, 213, 225, 0.16)';
+          ctx.fillRect(x + cw * 0.33, y + 3, 1.5, ch - 6);
+          ctx.fillRect(x + cw * 0.66, y + 3, 1.5, ch - 6);
+        }
+      }
+
+      // Textura antiderrapante micro-granulada
+      for (let i = 0; i < 4000; i++) {
+        ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.04)' : 'rgba(16,185,129,0.04)';
+        ctx.fillRect(Math.random() * 1024, Math.random() * 1024, 2, 2);
+      }
+
+      // Linhas laterais contínuas brancas de delimitação
+      ctx.fillStyle = 'rgba(248, 250, 252, 0.85)';
+      ctx.fillRect(28, 0, 14, 1024);
+      ctx.fillRect(1024 - 42, 0, 14, 1024);
+
+      // Linha central tracejada separadora de sentidos
+      ctx.fillStyle = 'rgba(248, 250, 252, 0.82)';
+      for (let y = 40; y < 1024; y += 170) {
+        ctx.fillRect(505, y, 14, 95);
+      }
+
+      // Pictograma de bicicleta na via direita
+      ctx.save();
+      ctx.translate(740, 520);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.lineWidth = 10;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      // Rodas
+      ctx.beginPath();
+      ctx.arc(0, 55, 34, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, -55, 34, 0, Math.PI * 2);
+      ctx.stroke();
+      // Quadro e guiador
+      ctx.beginPath();
+      ctx.moveTo(0, 55);
+      ctx.lineTo(-18, 5);
+      ctx.lineTo(18, -20);
+      ctx.lineTo(0, -55);
+      ctx.moveTo(-18, 5);
+      ctx.lineTo(16, 12);
+      ctx.moveTo(-22, -32);
+      ctx.lineTo(22, -32);
+      ctx.stroke();
+      ctx.restore();
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(1, 6.5);
+      tex.anisotropy = 4;
+      return tex;
+    }
+
+    // 2. Textura de Pavimento Permeável / Pedra Porosa Drenante
+    function createPermeableStoneTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Blocos drenantes com juntas permeáveis escuras
+      const bw = 64;
+      const bh = 32;
+      for (let row = 0; row < 16; row++) {
+        const offset = (row % 2) * (bw / 2);
+        for (let col = -1; col < 9; col++) {
+          const x = col * bw + offset;
+          const y = row * bh;
+          const v = 88 + Math.floor(Math.random() * 24);
+          ctx.fillStyle = `rgb(${v}, ${v + 5}, ${v + 10})`;
+          ctx.fillRect(x + 3, y + 3, bw - 6, bh - 6);
+        }
+      }
+
+      // Poros drenantes
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
+      for (let i = 0; i < 3000; i++) {
+        ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(2, 24);
+      return tex;
+    }
+
+    // 3. Textura de Madeira Natural para os Totens e Arcos
+    function createWoodTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#8b5a2b';
+      ctx.fillRect(0, 0, 512, 512);
+
+      for (let i = 0; i < 160; i++) {
+        const x = Math.random() * 512;
+        ctx.strokeStyle = i % 2 === 0 ? 'rgba(54, 30, 10, 0.2)' : 'rgba(180, 125, 72, 0.18)';
+        ctx.lineWidth = 1 + Math.random() * 2.5;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.bezierCurveTo(x + (Math.random() - 0.5) * 14, 170, x + (Math.random() - 0.5) * 14, 340, x, 512);
+        ctx.stroke();
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      return tex;
+    }
+
+    // 4. Ecrã Dinâmico do CONTADOR INTELIGENTE DE CICLISTAS (Página 24 da apresentação)
+    function initCounterScreenCanvas() {
+      counterCanvas = document.createElement('canvas');
+      counterCanvas.width = 512;
+      counterCanvas.height = 860;
+      counterCtx = counterCanvas.getContext('2d');
+      counterTexture = new THREE.CanvasTexture(counterCanvas);
+      counterTexture.anisotropy = 4;
+      updateCounterScreenCanvas();
+    }
+
+    function drawRoundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function updateCounterScreenCanvas(flash = false) {
+      const ctx = counterCtx;
+      const W = 512;
+      const H = 860;
+
+      ctx.fillStyle = flash ? '#063729' : '#0b141a';
+      ctx.fillRect(0, 0, W, H);
+
+      // Marca Greeling
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = '800 36px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Greeling', W / 2, 68);
+
+      // Subtítulo
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '700 22px Inter, sans-serif';
+      ctx.fillText('CONTADOR INTELIGENTE', W / 2, 128);
+      ctx.fillText('DE CICLISTAS', W / 2, 158);
+
+      // Número Principal (ex: 1,489)
+      const formattedToday = appState.cyclistsToday.toLocaleString('en-US');
+      ctx.fillStyle = flash ? '#34d399' : '#ffffff';
+      ctx.font = '800 104px Inter, sans-serif';
+      ctx.fillText(formattedToday, W / 2, 275);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '700 25px Inter, sans-serif';
+      ctx.fillText('PASSAGENS HOJE', W / 2, 322);
+
+      // Total Anual
+      const formattedAnnual = appState.cyclistsAnnual.toLocaleString('en-US');
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = '700 26px Inter, sans-serif';
+      ctx.fillText(`TOTAL ANUAL: ${formattedAnnual}`, W / 2, 392);
+
+      // Gráfico de Área (Curva de afluência horária)
+      const gx = 54;
+      const gy = 620;
+      const gw = 404;
+      const gh = 175;
+
+      // Eixos e grelha
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i <= 4; i++) {
+        const ly = gy - (i * gh) / 4;
+        ctx.beginPath();
+        ctx.moveTo(gx, ly);
+        ctx.lineTo(gx + gw, ly);
+        ctx.stroke();
+      }
+
+      // Área preenchida
+      const areaGrad = ctx.createLinearGradient(0, gy - gh, 0, gy);
+      areaGrad.addColorStop(0, 'rgba(52, 211, 153, 0.65)');
+      areaGrad.addColorStop(1, 'rgba(16, 185, 129, 0.08)');
+
+      ctx.beginPath();
+      ctx.moveTo(gx, gy);
+      ctx.bezierCurveTo(gx + 95, gy - 15, gx + 140, gy - 68, gx + 210, gy - 55);
+      ctx.bezierCurveTo(gx + 265, gy - 45, gx + 310, gy - 158, gx + 345, gy - 158);
+      ctx.bezierCurveTo(gx + 375, gy - 158, gx + 390, gy - 55, gx + gw, gy - 32);
+      ctx.lineTo(gx + gw, gy);
+      ctx.closePath();
+      ctx.fillStyle = areaGrad;
+      ctx.fill();
+
+      // Linha superior brilhante
+      ctx.beginPath();
+      ctx.moveTo(gx, gy);
+      ctx.bezierCurveTo(gx + 95, gy - 15, gx + 140, gy - 68, gx + 210, gy - 55);
+      ctx.bezierCurveTo(gx + 265, gy - 45, gx + 310, gy - 158, gx + 345, gy - 158);
+      ctx.bezierCurveTo(gx + 375, gy - 158, gx + 390, gy - 55, gx + gw, gy - 32);
+      ctx.strokeStyle = '#6ee7b7';
+      ctx.lineWidth = 3.5;
+      ctx.stroke();
+
+      // Triângulo marcador de pico
+      ctx.fillStyle = '#34d399';
+      ctx.beginPath();
+      ctx.moveTo(gx + 345, gy - 176);
+      ctx.lineTo(gx + 333, gy - 156);
+      ctx.lineTo(gx + 357, gy - 156);
+      ctx.closePath();
+      ctx.fill();
+
+      // Rodapé: DADOS ENVIADOS PARA CÂMARA MUNICIPAL + ODS 7 e 11
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '700 20px Inter, sans-serif';
+      ctx.fillText('DADOS ENVIADOS PARA:', W / 2, 682);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '800 28px Inter, sans-serif';
+      ctx.fillText('CÂMARA MUNICIPAL', W / 2, 718);
+
+      // Badges ODS 7 e ODS 11
+      drawRoundRect(ctx, 130, 745, 76, 76, 8);
+      ctx.fillStyle = '#eab308';
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '800 18px Inter, sans-serif';
+      ctx.fillText('ODS 7', 168, 790);
+
+      drawRoundRect(ctx, 306, 745, 76, 76, 8);
+      ctx.fillStyle = '#f97316';
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText('ODS 11', 344, 790);
+
+      counterTexture.needsUpdate = true;
+    }
+
+    // 5. Ecrã Dinâmico de QUALIDADE DO AR E TEMPERATURA (Página 24 direita)
+    function initAirScreenCanvas() {
+      airCanvas = document.createElement('canvas');
+      airCanvas.width = 512;
+      airCanvas.height = 860;
+      airCtx = airCanvas.getContext('2d');
+      airTexture = new THREE.CanvasTexture(airCanvas);
+      airTexture.anisotropy = 4;
+      updateAirScreenCanvas();
+    }
+
+    function updateAirScreenCanvas() {
+      const ctx = airCtx;
+      const W = 512;
+      const H = 860;
+
+      ctx.fillStyle = '#0e171e';
+      ctx.fillRect(0, 0, W, H);
+
+      // Logótipo G greeling
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '800 32px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('G greeling', W / 2, 62);
+
+      // Título
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = '800 26px Inter, sans-serif';
+      ctx.fillText('QUALIDADE DO AR', W / 2, 118);
+      ctx.fillText('E TEMPERATURA', W / 2, 150);
+
+      // Temperatura Atual (28°C de dia / 17°C de noite)
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '600 17px Inter, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('TEMPERATURA ATUAL:', 56, 200);
+
+      const tempVal = appState.isNight ? '17°C' : '28°C';
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '800 68px Inter, sans-serif';
+      ctx.fillText(tempVal, 56, 268);
+
+      // Ícone Sol ou Lua à direita da temperatura
+      if (!appState.isNight) {
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.arc(375, 242, 32, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 5;
+        for (let r = 0; r < 8; r++) {
+          const a = (r * Math.PI) / 4;
+          ctx.beginPath();
+          ctx.moveTo(375 + Math.cos(a) * 40, 242 + Math.sin(a) * 40);
+          ctx.lineTo(375 + Math.cos(a) * 52, 242 + Math.sin(a) * 52);
+          ctx.stroke();
+        }
+      } else {
+        ctx.fillStyle = '#93c5fd';
+        ctx.beginPath();
+        ctx.arc(375, 242, 30, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#0e171e';
+        ctx.beginPath();
+        ctx.arc(388, 232, 24, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Ícone Folha Sorridente Verde
+      ctx.save();
+      ctx.translate(W / 2, 385);
+      ctx.fillStyle = '#4ade80';
+      ctx.beginPath();
+      ctx.moveTo(-62, 52);
+      ctx.quadraticCurveTo(-72, -48, 56, -56);
+      ctx.quadraticCurveTo(68, 46, -34, 48);
+      ctx.lineTo(-62, 66);
+      ctx.closePath();
+      ctx.fill();
+
+      // Olhos e sorriso na folha
+      ctx.strokeStyle = '#064e3b';
+      ctx.lineWidth = 6;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(-18, -8, 10, Math.PI, 0);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(18, -8, 10, Math.PI, 0);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 8, 20, 0.15 * Math.PI, 0.85 * Math.PI);
+      ctx.stroke();
+      ctx.restore();
+
+      // Recomendação
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = '700 22px Inter, sans-serif';
+      ctx.fillText('RECOMENDAÇÃO:', W / 2, 496);
+
+      ctx.fillStyle = '#4ade80';
+      ctx.font = '800 26px Inter, sans-serif';
+      ctx.fillText('APROVEITE O AR PURO!', W / 2, 532);
+
+      // Badge ODS 3 & 11
+      drawRoundRect(ctx, 188, 550, 136, 32, 8);
+      ctx.fillStyle = '#0284c7';
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '800 17px Inter, sans-serif';
+      ctx.fillText('ODS 3 & 11', W / 2, 572);
+
+      // Secção Rotas Mais Frescas Disponíveis
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = '700 20px Inter, sans-serif';
+      ctx.fillText('ROTAS MAIS FRESCAS DISPONÍVEIS', W / 2, 628);
+
+      drawRoundRect(ctx, 42, 646, W - 84, 182, 16);
+      ctx.fillStyle = '#14532d';
+      ctx.fill();
+      ctx.strokeStyle = '#4ade80';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '800 20px Inter, sans-serif';
+      ctx.fillText('ROTA ALTERNATIVA FRESCA', W / 2, 682);
+
+      // Mini ilustração da ciclovia arborizada dentro do cartão
+      drawRoundRect(ctx, 62, 698, W - 124, 112, 10);
+      ctx.fillStyle = '#065f46';
+      ctx.fill();
+      ctx.fillStyle = '#334155';
+      ctx.beginPath();
+      ctx.moveTo(210, 810);
+      ctx.lineTo(246, 698);
+      ctx.lineTo(266, 698);
+      ctx.lineTo(302, 810);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#bbf7d0';
+      ctx.font = '600 15px Inter, sans-serif';
+      ctx.fillText('Túnel Verde Greeling • -3,8°C Sombra Natural', W / 2, 796);
+
+      airTexture.needsUpdate = true;
+    }
+
+    /**
+     * ============================================================================
+     * INICIALIZAÇÃO DA CENA 3D E CONSTRUÇÃO DA CICLOVIA GREELING
+     * ============================================================================
+     */
+    function initScene() {
+      const container = document.getElementById('canvas-container');
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color('#cbe4dc');
+      scene.fog = new THREE.FogExp2('#cbe4dc', 0.019);
+
+      camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 140);
+      camera.position.copy(CAMERA_PRESETS.geral.pos);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.08;
+      container.appendChild(renderer.domElement);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.target.copy(CAMERA_PRESETS.geral.target);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.065;
+      controls.maxPolarAngle = Math.PI * 0.485;
+      controls.minDistance = 1.8;
+      controls.maxDistance = 28;
+      controls.update();
+
+      controls.addEventListener('start', () => {
+        isCameraAnimating = false;
+      });
+
+      setupLights();
+      buildCicloviaArchitecture();
+      buildGreenTunnel();
+      buildServiceAndChargingStation();
+      buildEntranceTotems();
+      buildUndergroundXraySystems();
+      buildAnimatedCyclist();
+      buildRainSystem();
+      createHotspotPins();
+      bindUIEvents();
+
+      setTimeout(() => {
+        const loader = document.getElementById('loader-screen');
+        loader.style.opacity = '0';
+        setTimeout(() => loader.remove(), 500);
+      }, 450);
+
+      animate();
+    }
+
+    function setupLights() {
+      hemiLight = new THREE.HemisphereLight('#f0fdf4', '#334155', 0.92);
+      hemiLight.position.set(0, 16, 0);
+      scene.add(hemiLight);
+
+      dirLight = new THREE.DirectionalLight('#fffbeb', 1.5);
+      dirLight.position.set(9, 16, -8);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 2048;
+      dirLight.shadow.mapSize.height = 2048;
+      dirLight.shadow.camera.near = 1;
+      dirLight.shadow.camera.far = 45;
+      const d = 15;
+      dirLight.shadow.camera.left = -d;
+      dirLight.shadow.camera.right = d;
+      dirLight.shadow.camera.top = d;
+      dirLight.shadow.camera.bottom = -d;
+      dirLight.shadow.bias = -0.0005;
+      scene.add(dirLight);
+    }
+
+    /**
+     * 1. PAVIMENTO SOLAR, ILUMINAÇÃO LED EMBUTIDA E DRENAGEM PERMEÁVEL
+     */
+    function buildCicloviaArchitecture() {
+      cicloviaGroup = new THREE.Group();
+      cicloviaGroup.name = 'Ciclovia_Fotovoltaica_GREELING';
+
+      const solarTex = createSolarCyclePavementTexture();
+      const permeableTex = createPermeableStoneTexture();
+
+      // Terreno parque verde envolvente
+      const grassMat = new THREE.MeshStandardMaterial({ color: '#2e5932', roughness: 0.92 });
+      const parkGround = new THREE.Mesh(new THREE.BoxGeometry(24, 0.14, 32), grassMat);
+      parkGround.position.set(0, 0.0, 0);
+      parkGround.receiveShadow = true;
+      parkGround.name = 'Terreno_Parque_Verde';
+      cicloviaGroup.add(parkGround);
+
+      // Pavimento Solar Antiderrapante (26m comprimento x 3.2m largura)
+      const solarRoadMat = new THREE.MeshStandardMaterial({
+        map: solarTex,
+        roughness: 0.28,
+        metalness: 0.52,
+        transparent: true,
+        opacity: 1.0
+      });
+      xrayShellMaterials.push(solarRoadMat);
+
+      const solarPavement = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.08, 26.0), solarRoadMat);
+      solarPavement.position.set(0, 0.11, 0);
+      solarPavement.receiveShadow = true;
+      solarPavement.name = 'Pavimento_Solar_Antiderrapante';
+      cicloviaGroup.add(solarPavement);
+
+      // Lancis laterais em betão arquitetónico com calhas LED embutidas
+      const curbMat = new THREE.MeshStandardMaterial({
+        color: '#94a3b8',
+        roughness: 0.72,
+        transparent: true,
+        opacity: 1.0
+      });
+      xrayShellMaterials.push(curbMat);
+
+      [-1.70, 1.70].forEach((cx, idx) => {
+        const curb = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.11, 26.0), curbMat);
+        curb.position.set(cx, 0.115, 0);
+        curb.receiveShadow = true;
+        curb.name = `Lancil_Margem_${idx + 1}`;
+        cicloviaGroup.add(curb);
+      });
+
+      // 26 Segmentos de Iluminação LED Embutida Inteligente ao longo de ambas as margens
+      for (let i = 0; i < 26; i++) {
+        const segZ = -12.5 + i * 1.0;
+
+        const matL = new THREE.MeshStandardMaterial({
+          color: '#ecfdf5',
+          emissive: '#34d399',
+          emissiveIntensity: 0.15,
+          roughness: 0.2
+        });
+        const ledL = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.016, 0.94), matL);
+        ledL.position.set(-1.68, 0.172, segZ);
+        ledL.name = `LED_Embutido_Esquerda_${i + 1}`;
+        cicloviaGroup.add(ledL);
+        ledSegmentsLeft.push({ mesh: ledL, mat: matL, z: segZ });
+
+        const matR = new THREE.MeshStandardMaterial({
+          color: '#ecfdf5',
+          emissive: '#34d399',
+          emissiveIntensity: 0.15,
+          roughness: 0.2
+        });
+        const ledR = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.016, 0.94), matR);
+        ledR.position.set(1.68, 0.172, segZ);
+        ledR.name = `LED_Embutido_Direita_${i + 1}`;
+        cicloviaGroup.add(ledR);
+        ledSegmentsRight.push({ mesh: ledR, mat: matR, z: segZ });
+      }
+
+      // Passeio Permeável / Drenante em ambos os lados + Grelhas de Drenagem Inteligente
+      const permeableMat = new THREE.MeshStandardMaterial({
+        map: permeableTex,
+        roughness: 0.85,
+        transparent: true,
+        opacity: 1.0
+      });
+      xrayShellMaterials.push(permeableMat);
+
+      const grateMat = new THREE.MeshStandardMaterial({ color: '#1e293b', roughness: 0.4, metalness: 0.8 });
+      waterChannelMat = new THREE.MeshStandardMaterial({
+        color: '#0ea5e9',
+        emissive: '#0284c7',
+        emissiveIntensity: 0.2,
+        transparent: true,
+        opacity: 0.0
+      });
+
+      [-2.12, 2.12].forEach((px, idx) => {
+        const permStrip = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.09, 26.0), permeableMat);
+        permStrip.position.set(px, 0.105, 0);
+        permStrip.receiveShadow = true;
+        permStrip.name = `Pavimento_Permeavel_${idx + 1}`;
+        cicloviaGroup.add(permStrip);
+
+        // Canal/Grelha metálica de drenagem pluvial
+        const gx = px < 0 ? -1.86 : 1.86;
+        const grate = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.095, 26.0), grateMat);
+        grate.position.set(gx, 0.108, 0);
+        grate.name = `Grelha_Drenagem_${idx + 1}`;
+        cicloviaGroup.add(grate);
+
+        // Lâmina de água visível durante simulação de chuva
+        const waterFlow = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.01, 25.8), waterChannelMat);
+        waterFlow.position.set(gx, 0.158, 0);
+        cicloviaGroup.add(waterFlow);
+      });
+
+      // Jardins de Chuva Laterais com Flora Nativa, Flores Polinizadoras e Focos Solares
+      const foliageColors = ['#15803d', '#16a34a', '#4d7c0f', '#3f6212', '#22c55e'];
+      const flowerColors = ['#c084fc', '#facc15', '#f472b6', '#ffffff'];
+      const shrubMats = foliageColors.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 }));
+      const flowerMats = flowerColors.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 }));
+
+      const shrubGeo = new THREE.DodecahedronGeometry(0.28, 1);
+      const flowerGeo = new THREE.SphereGeometry(0.055, 8, 8);
+
+      for (let s = 0; s < 140; s++) {
+        const side = s % 2 === 0 ? -1 : 1;
+        const sz = -12.5 + Math.random() * 25.0;
+        // Deixa espaço livre na baía de ferramentas (x > 0, z entre -6.2 e -2.4)
+        if (side > 0 && sz > -6.4 && sz < -2.2) continue;
+
+        const sx = side * (2.75 + Math.random() * 3.8);
+        const shrub = new THREE.Mesh(shrubGeo, shrubMats[s % shrubMats.length]);
+        const scale = 0.65 + Math.random() * 0.95;
+        shrub.scale.set(scale, scale * 0.75, scale);
+        shrub.position.set(sx, 0.16 + scale * 0.14, sz);
+        shrub.castShadow = true;
+        shrub.receiveShadow = true;
+        cicloviaGroup.add(shrub);
+
+        // Flores nativas para corredores de polinizadores
+        if (s % 2 === 0) {
+          const flower = new THREE.Mesh(flowerGeo, flowerMats[s % flowerMats.length]);
+          flower.position.set(sx + (Math.random() - 0.5) * 0.25, 0.24 + scale * 0.25, sz + (Math.random() - 0.5) * 0.25);
+          cicloviaGroup.add(flower);
+        }
+      }
+
+      // Mini Focos Solares de Baixo Impacto ao longo dos canteiros
+      const miniSolarMat = new THREE.MeshStandardMaterial({ color: '#0f172a', roughness: 0.3, metalness: 0.7 });
+      [-8.5, -2.5, 3.5, 9.5].forEach(uz => {
+        [-2.55, 2.55].forEach(ux => {
+          if (ux > 0 && uz > -6.0 && uz < -2.0) return;
+          const stake = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.14, 0.14), miniSolarMat);
+          stake.position.set(ux, 0.15, uz);
+          stake.rotation.z = ux < 0 ? -0.35 : 0.35;
+          cicloviaGroup.add(stake);
+
+          const upLight = new THREE.PointLight('#fef08a', 0.0, 2.6, 1.8);
+          upLight.position.set(ux, 0.32, uz);
+          scene.add(upLight);
+          gardenUplights.push(upLight);
+        });
+      });
+
+      scene.add(cicloviaGroup);
+    }
+
+    /**
+     * 2. TÚNEL VERDE (Arcos Tubulares + Trepadeiras + Glicínias Roxas)
+     */
+    function buildGreenTunnel() {
+      const tunnelGroup = new THREE.Group();
+      tunnelGroup.name = 'Tunel_Verde_Conforto_Termico';
+
+      const archGreenMat = new THREE.MeshStandardMaterial({
+        color: '#2d6a4f',
+        roughness: 0.45,
+        metalness: 0.55
+      });
+
+      const leafColors = ['#15803d', '#16a34a', '#4d7c0f', '#22c55e', '#3f6212'];
+      const leafMats = leafColors.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 }));
+      const wisteriaMats = [
+        new THREE.MeshStandardMaterial({ color: '#9333ea', roughness: 0.7 }),
+        new THREE.MeshStandardMaterial({ color: '#a855f7', roughness: 0.7 }),
+        new THREE.MeshStandardMaterial({ color: '#c084fc', roughness: 0.7 })
+      ];
+
+      const leafGeo = new THREE.DodecahedronGeometry(0.18, 1);
+      const blossomGeo = new THREE.ConeGeometry(0.065, 0.28, 7);
+
+      // 7 Arcos espaçados a cada 2 metros na segunda metade da ciclovia (z = 0.5 até z = 12.5)
+      const archCount = 7;
+      for (let a = 0; a < archCount; a++) {
+        const az = 0.5 + a * 2.0;
+
+        // Arco principal em tubo curvo
+        const archGeo = new THREE.TorusGeometry(2.12, 0.065, 12, 36, Math.PI);
+        const archMesh = new THREE.Mesh(archGeo, archGreenMat);
+        archMesh.position.set(0, 1.35, az);
+        archMesh.castShadow = true;
+        archMesh.name = `Arco_Tunel_Verde_${a + 1}`;
+        tunnelGroup.add(archMesh);
+
+        // Pilares verticais de apoio dos arcos
+        [-2.12, 2.12].forEach((px, pIdx) => {
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.075, 1.35, 12), archGreenMat);
+          post.position.set(px, 0.68, az);
+          post.castShadow = true;
+          post.name = `Pilar_Tunel_${a + 1}_${pIdx + 1}`;
+          tunnelGroup.add(post);
+        });
+
+        // Longarinas longitudinais de ligação entre arcos
+        if (a < archCount - 1) {
+          [0.35, 0.78, 1.25, 1.89, 2.36, 2.79].forEach(ang => {
+            const lx = Math.cos(ang) * 2.12;
+            const ly = 1.35 + Math.sin(ang) * 2.12;
+            const purlin = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 2.0, 8), archGreenMat);
+            purlin.rotation.x = Math.PI / 2;
+            purlin.position.set(lx, ly, az + 1.0);
+            tunnelGroup.add(purlin);
+          });
+        }
+      }
+
+      // Cobertura densa de trepadeiras e cachos de glicínias roxas ao longo de todo o túnel
+      for (let f = 0; f < 320; f++) {
+        const fz = 0.2 + Math.random() * 12.5;
+        const angle = 0.08 + Math.random() * (Math.PI - 0.16);
+        const radius = 2.06 + (Math.random() - 0.5) * 0.22;
+        const fx = Math.cos(angle) * radius;
+        const fy = 1.35 + Math.sin(angle) * radius;
+
+        const foliage = new THREE.Mesh(leafGeo, leafMats[f % leafMats.length]);
+        foliage.position.set(fx, fy, fz);
+        foliage.scale.set(0.8 + Math.random() * 0.6, 0.65 + Math.random() * 0.5, 0.9 + Math.random() * 0.6);
+        foliage.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+        foliage.castShadow = true;
+        tunnelGroup.add(foliage);
+
+        // Cachos pendentes de flores de glicínia roxa no topo interno do túnel
+        if (f % 4 === 0 && angle > 0.65 && angle < 2.48) {
+          const blossom = new THREE.Mesh(blossomGeo, wisteriaMats[f % wisteriaMats.length]);
+          blossom.rotation.x = Math.PI;
+          blossom.position.set(fx * 0.94, fy - 0.22, fz);
+          tunnelGroup.add(blossom);
+        }
+      }
+
+      cicloviaGroup.add(tunnelGroup);
+    }
+
+    /**
+     * 3. ESTAÇÃO DE FERRAMENTAS & BOMBA DE AR + TOTEM DE CARREGAMENTO SOLAR (Página 23)
+     */
+    function buildServiceAndChargingStation() {
+      const bayGroup = new THREE.Group();
+      bayGroup.name = 'Estacao_Ferramentas_e_Carregamento';
+
+      const permeableTex = createPermeableStoneTexture();
+      const woodTex = createWoodTexture();
+
+      const anthraciteMat = new THREE.MeshStandardMaterial({
+        color: '#1e242b',
+        roughness: 0.38,
+        metalness: 0.75,
+        transparent: true,
+        opacity: 1.0
+      });
+      xrayShellMaterials.push(anthraciteMat);
+
+      const woodMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.6 });
+      const steelMat = new THREE.MeshStandardMaterial({ color: '#cbd5e1', roughness: 0.25, metalness: 0.9 });
+      const solarMat = new THREE.MeshStandardMaterial({ color: '#0f2544', roughness: 0.2, metalness: 0.65 });
+
+      // Baía de serviço em pavimento drenante alargado à direita (x = 1.8..3.8, z = -6.2..-2.4)
+      const bayFloor = new THREE.Mesh(
+        new THREE.BoxGeometry(2.1, 0.09, 3.8),
+        new THREE.MeshStandardMaterial({ map: permeableTex, roughness: 0.85 })
+      );
+      bayFloor.position.set(2.85, 0.105, -4.3);
+      bayFloor.receiveShadow = true;
+      bayFloor.name = 'Baia_Servico_Permeavel';
+      bayGroup.add(bayFloor);
+
+      // --- A) COLUNA DE FERRAMENTAS & BOMBA DE AR AUTOMÁTICA SOLAR (z = -3.4) ---
+      const toolCol = new THREE.Group();
+      toolCol.position.set(2.88, 0.15, -3.4);
+      toolCol.rotation.y = -Math.PI / 2; // Virada para o ciclista na ciclovia
+      toolCol.name = 'Coluna_Ferramentas_Bomba_Ar';
+
+      const colBody = new THREE.Mesh(new THREE.BoxGeometry(0.62, 2.25, 0.34), anthraciteMat);
+      colBody.position.set(0, 1.125, 0);
+      colBody.castShadow = true;
+      toolCol.add(colBody);
+
+      // Painel frontal inferior em madeira natural
+      const lowerWood = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.65, 0.03), woodMat);
+      lowerWood.position.set(0, 0.38, 0.175);
+      toolCol.add(lowerWood);
+
+      // Painel solar inclinado no topo + Braço de luz LED direcionada
+      const topSolar = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.04, 0.66), solarMat);
+      topSolar.position.set(0, 2.38, 0.04);
+      topSolar.rotation.x = 0.32;
+      topSolar.castShadow = true;
+      toolCol.add(topSolar);
+
+      const lightArm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.03, 0.28), anthraciteMat);
+      lightArm.position.set(0, 2.24, 0.24);
+      toolCol.add(lightArm);
+
+      // Visor digital da Bomba de Ar Automática
+      const pumpDisplay = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.42, 0.24),
+        new THREE.MeshBasicMaterial({ color: '#0284c7' })
+      );
+      pumpDisplay.position.set(0, 1.82, 0.174);
+      toolCol.add(pumpDisplay);
+
+      // Mangueira flexível da bomba de ar
+      const hoseCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0.24, 1.48, 0.16),
+        new THREE.Vector3(0.36, 1.05, 0.22),
+        new THREE.Vector3(0.32, 0.55, 0.18),
+        new THREE.Vector3(0.22, 0.82, 0.17)
+      ]);
+      const hoseMesh = new THREE.Mesh(
+        new THREE.TubeGeometry(hoseCurve, 20, 0.014, 8, false),
+        new THREE.MeshStandardMaterial({ color: '#0f172a', roughness: 0.5 })
+      );
+      toolCol.add(hoseMesh);
+
+      // Kit de Ferramentas Gratuitas em 3D (Chaves de bocas, chaves de fendas e desmonta-pneus)
+      const toolRecess = new THREE.Mesh(
+        new THREE.BoxGeometry(0.50, 0.88, 0.04),
+        new THREE.MeshStandardMaterial({ color: '#11161c', roughness: 0.6 })
+      );
+      toolRecess.position.set(-0.02, 1.18, 0.155);
+      toolCol.add(toolRecess);
+
+      // 5 Chaves de bocas em aço suspensas
+      for (let w = 0; w < 5; w++) {
+        const wx = -0.18 + w * 0.075;
+        const wh = 0.24 - w * 0.018;
+        const wrench = new THREE.Mesh(new THREE.BoxGeometry(0.018, wh, 0.008), steelMat);
+        wrench.position.set(wx, 0.96, 0.185);
+        toolCol.add(wrench);
+
+        const head = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.01, 12), steelMat);
+        head.rotation.x = Math.PI / 2;
+        head.position.set(wx, 0.96 + wh / 2, 0.185);
+        toolCol.add(head);
+      }
+
+      // 4 Chaves de fendas / Philips
+      const handleColors = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6'];
+      for (let d = 0; d < 4; d++) {
+        const dx = -0.14 + d * 0.08;
+        const handle = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.016, 0.014, 0.11, 10),
+          new THREE.MeshStandardMaterial({ color: handleColors[d], roughness: 0.4 })
+        );
+        handle.position.set(dx, 1.44, 0.185);
+        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.13, 8), steelMat);
+        shaft.position.set(dx, 1.32, 0.185);
+        toolCol.add(handle, shaft);
+      }
+
+      bayGroup.add(toolCol);
+
+      // --- B) TOTEM DE CARREGAMENTO SOLAR + E-BIKE & TROTINETE ESTACIONADAS (z = -5.2) ---
+      const chargeTotem = new THREE.Group();
+      chargeTotem.position.set(2.88, 0.15, -5.2);
+      chargeTotem.rotation.y = -Math.PI / 2;
+      chargeTotem.name = 'Totem_Carregamento_Solar_Bicicletas';
+
+      const ctBody = new THREE.Mesh(new THREE.BoxGeometry(0.54, 2.05, 0.32), anthraciteMat);
+      ctBody.position.set(0, 1.025, 0);
+      ctBody.castShadow = true;
+      chargeTotem.add(ctBody);
+
+      const ctWoodTrim = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.45, 0.025), woodMat);
+      ctWoodTrim.position.set(0, 1.72, 0.165);
+      chargeTotem.add(ctWoodTrim);
+
+      const ctSolar = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.04, 0.62), solarMat);
+      ctSolar.position.set(0, 2.18, 0.04);
+      ctSolar.rotation.x = 0.34;
+      ctSolar.castShadow = true;
+      chargeTotem.add(ctSolar);
+
+      // Placa USB-C (60W) & USB-A (18W) com LEDs verdes
+      const usbPlate = new THREE.Mesh(
+        new THREE.BoxGeometry(0.38, 0.32, 0.02),
+        new THREE.MeshStandardMaterial({ color: '#0f172a', roughness: 0.3, metalness: 0.8 })
+      );
+      usbPlate.position.set(0, 1.24, 0.165);
+      chargeTotem.add(usbPlate);
+
+      const ledMat = new THREE.MeshStandardMaterial({ color: '#22c55e', emissive: '#10b981', emissiveIntensity: 1.8 });
+      for (let u = 0; u < 4; u++) {
+        const ux = -0.12 + u * 0.08;
+        const port = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.055, 0.015), steelMat);
+        port.position.set(ux, 1.28, 0.178);
+        const led = new THREE.Mesh(new THREE.SphereGeometry(0.007, 8, 8), ledMat);
+        led.position.set(ux, 1.32, 0.182);
+        chargeTotem.add(port, led);
+      }
+
+      // E-Bike estacionada ao lado do totem com cabo de carregamento ligado
+      const parkedBike = createSimpleBikeMesh('#334155', true);
+      parkedBike.position.set(-0.68, 0.0, 0.35);
+      parkedBike.rotation.y = 0.35;
+      parkedBike.name = 'Bicicleta_Eletrica_Em_Carregamento';
+      chargeTotem.add(parkedBike);
+
+      // Cabo de carregamento ligado do totem à e-bike
+      const cableCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-0.14, 0.92, 0.16),
+        new THREE.Vector3(-0.38, 0.62, 0.28),
+        new THREE.Vector3(-0.62, 0.68, 0.35)
+      ]);
+      const cableMesh = new THREE.Mesh(
+        new THREE.TubeGeometry(cableCurve, 16, 0.01, 8, false),
+        new THREE.MeshStandardMaterial({ color: '#10b981', emissive: '#059669', emissiveIntensity: 0.4 })
+      );
+      chargeTotem.add(cableMesh);
+
+      bayGroup.add(chargeTotem);
+      cicloviaGroup.add(bayGroup);
+    }
+
+    /**
+     * 4. CONTADOR INTELIGENTE DE CICLISTAS & ESTAÇÃO DE SENSORES AMBIENTAIS (Página 24)
+     */
+    function buildEntranceTotems() {
+      const totemsGroup = new THREE.Group();
+      totemsGroup.name = 'Totens_Entrada_Contador_e_Sensores';
+
+      const woodTex = createWoodTexture();
+      const anthraciteMat = new THREE.MeshStandardMaterial({
+        color: '#181e24',
+        roughness: 0.38,
+        metalness: 0.72,
+        transparent: true,
+        opacity: 1.0
+      });
+      xrayShellMaterials.push(anthraciteMat);
+
+      const woodMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.6 });
+      const solarMat = new THREE.MeshStandardMaterial({ color: '#0f2544', roughness: 0.2, metalness: 0.65 });
+
+      // --- A) TOTEM CONTADOR INTELIGENTE DE CICLISTAS (Esquerda da entrada: x = -2.18, z = -10.8) ---
+      const counterTotem = new THREE.Group();
+      counterTotem.position.set(-2.18, 0.15, -10.8);
+      counterTotem.rotation.y = 0.28; // Ligeiramente orientado para quem entra
+      counterTotem.name = 'Totem_Contador_Inteligente_Ciclistas';
+
+      const cBody = new THREE.Mesh(new THREE.BoxGeometry(0.76, 2.05, 0.32), anthraciteMat);
+      cBody.position.set(0, 1.025, 0);
+      cBody.castShadow = true;
+      counterTotem.add(cBody);
+
+      // Molduras laterais em madeira quente (como na pág. 24)
+      [-0.395, 0.395].forEach(wx => {
+        const trim = new THREE.Mesh(new THREE.BoxGeometry(0.035, 2.02, 0.30), woodMat);
+        trim.position.set(wx, 1.025, 0);
+        counterTotem.add(trim);
+      });
+
+      const cSolar = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.035, 0.44), solarMat);
+      cSolar.position.set(0, 2.13, 0);
+      cSolar.rotation.x = -0.25;
+      counterTotem.add(cSolar);
+
+      initCounterScreenCanvas();
+      const cScreenMat = new THREE.MeshStandardMaterial({
+        map: counterTexture,
+        emissiveMap: counterTexture,
+        emissive: '#ffffff',
+        emissiveIntensity: 0.75
+      });
+      const cScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 1.12), cScreenMat);
+      cScreen.position.set(0, 1.24, -0.163);
+      cScreen.rotation.y = Math.PI; // Virado para o sentido de entrada (-Z)
+      cScreen.name = 'Ecra_Contador_Ciclistas';
+      counterTotem.add(cScreen);
+
+      totemsGroup.add(counterTotem);
+
+      // --- B) ESTAÇÃO DE QUALIDADE DO AR E TEMPERATURA (Direita da entrada: x = +2.18, z = -10.8) ---
+      const airTotem = new THREE.Group();
+      airTotem.position.set(2.18, 0.15, -10.8);
+      airTotem.rotation.y = -0.28;
+      airTotem.name = 'Estacao_Sensores_Qualidade_Ar';
+
+      const aBody = new THREE.Mesh(new THREE.BoxGeometry(0.76, 2.05, 0.32), anthraciteMat);
+      aBody.position.set(0, 1.025, 0);
+      aBody.castShadow = true;
+      airTotem.add(aBody);
+
+      [-0.395, 0.395].forEach(wx => {
+        const trim = new THREE.Mesh(new THREE.BoxGeometry(0.035, 2.02, 0.30), woodMat);
+        trim.position.set(wx, 1.025, 0);
+        airTotem.add(trim);
+      });
+
+      const aSolar = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.035, 0.44), solarMat);
+      aSolar.position.set(0, 2.13, 0);
+      aSolar.rotation.x = -0.25;
+      airTotem.add(aSolar);
+
+      initAirScreenCanvas();
+      const aScreenMat = new THREE.MeshStandardMaterial({
+        map: airTexture,
+        emissiveMap: airTexture,
+        emissive: '#ffffff',
+        emissiveIntensity: 0.75
+      });
+      const aScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 1.12), aScreenMat);
+      aScreen.position.set(0, 1.24, -0.163);
+      aScreen.rotation.y = Math.PI;
+      aScreen.name = 'Ecra_Qualidade_Ar_Temperatura';
+      airTotem.add(aScreen);
+
+      totemsGroup.add(airTotem);
+      cicloviaGroup.add(totemsGroup);
+    }
+
+    /**
+     * 5. SISTEMAS SUBTERRÂNEOS PARA VISTA RAIO-X (Baterias LiFePO4, Tubagens, Espira Indução)
+     */
+    function buildUndergroundXraySystems() {
+      undergroundGroup = new THREE.Group();
+      undergroundGroup.name = 'Infraestrutura_Subterranea_RaioX';
+      undergroundGroup.visible = false;
+
+      // Espira de Indução Eletromagnética sob o pavimento solar em z = -10.8
+      inductionLoopMat = new THREE.MeshStandardMaterial({
+        color: '#10b981',
+        emissive: '#10b981',
+        emissiveIntensity: 0.8
+      });
+      const loopFrame = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.025, 0.9), inductionLoopMat);
+      loopFrame.position.set(0, 0.05, -10.8);
+      loopFrame.name = 'Espira_Inducao_Contagem_Ciclistas';
+      undergroundGroup.add(loopFrame);
+
+      // Tubagens perfuradas de drenagem pluvial sob ambos os passeios permeáveis
+      const pipeMat = new THREE.MeshStandardMaterial({
+        color: '#0284c7',
+        emissive: '#0369a1',
+        emissiveIntensity: 0.5,
+        roughness: 0.3
+      });
+      [-1.88, 1.88].forEach((px, idx) => {
+        const drainPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 25.5, 16), pipeMat);
+        drainPipe.rotation.x = Math.PI / 2;
+        drainPipe.position.set(px, -0.05, 0);
+        drainPipe.name = `Tubagem_Drenagem_Subterranea_${idx + 1}`;
+        undergroundGroup.add(drainPipe);
+      });
+
+      // Câmaras técnicas subterrâneas com Baterias LiFePO4 & Controladores MPPT
+      const batMat = new THREE.MeshStandardMaterial({ color: '#059669', emissive: '#047857', emissiveIntensity: 0.4 });
+      const mpptMat = new THREE.MeshStandardMaterial({ color: '#f59e0b', emissive: '#d97706', emissiveIntensity: 0.5 });
+
+      [
+        { x: -2.18, z: -10.8 },
+        { x: 2.88, z: -5.2 }
+      ].forEach((vaultPos, idx) => {
+        for (let b = 0; b < 3; b++) {
+          const bat = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.14, 0.36), batMat);
+          bat.position.set(vaultPos.x, -0.35 + b * 0.16, vaultPos.z);
+          bat.name = `Banco_Baterias_LiFePO4_${idx + 1}_${b + 1}`;
+          undergroundGroup.add(bat);
+        }
+        const mppt = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.28), mpptMat);
+        mppt.position.set(vaultPos.x, 0.14, vaultPos.z);
+        mppt.name = `Controlador_Solar_MPPT_${idx + 1}`;
+        undergroundGroup.add(mppt);
+      });
+
+      cicloviaGroup.add(undergroundGroup);
+    }
+
+    /**
+     * 6. CICLISTA 3D ANIMADO EM BICICLETA ELÉTRICA (Aciona os Sensores PIR e o Contador)
+     */
+    function createSimpleBikeMesh(frameColor, isParked = false) {
+      const bike = new THREE.Group();
+      const frameMat = new THREE.MeshStandardMaterial({ color: frameColor, roughness: 0.35, metalness: 0.7 });
+      const tireMat = new THREE.MeshStandardMaterial({ color: '#0f172a', roughness: 0.85 });
+      const rimMat = new THREE.MeshStandardMaterial({ color: '#cbd5e1', roughness: 0.3, metalness: 0.8 });
+
+      function makeWheel() {
+        const wGroup = new THREE.Group();
+        const tire = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.036, 12, 28), tireMat);
+        tire.rotation.y = Math.PI / 2;
+        tire.castShadow = true;
+        wGroup.add(tire);
+
+        for (let s = 0; s < 6; s++) {
+          const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.64, 6), rimMat);
+          spoke.rotation.x = (s * Math.PI) / 6;
+          wGroup.add(spoke);
+        }
+        return wGroup;
+      }
+
+      const fWheel = makeWheel();
+      fWheel.position.set(0, 0.36, 0.56);
+      const rWheel = makeWheel();
+      rWheel.position.set(0, 0.36, -0.54);
+      bike.add(fWheel, rWheel);
+
+      // Quadro da bicicleta elétrica + bateria integrada
+      const downTube = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.085, 0.68), frameMat);
+      downTube.position.set(0, 0.56, 0.08);
+      downTube.rotation.x = -0.58;
+      downTube.castShadow = true;
+
+      const seatTube = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.56, 10), frameMat);
+      seatTube.position.set(0, 0.62, -0.22);
+      seatTube.rotation.x = -0.25;
+
+      const fork = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.68, 10), frameMat);
+      fork.position.set(0, 0.66, 0.46);
+      fork.rotation.x = -0.25;
+
+      const handlebar = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.54, 10), rimMat);
+      handlebar.rotation.z = Math.PI / 2;
+      handlebar.position.set(0, 0.98, 0.38);
+
+      const saddle = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.05, 0.24), tireMat);
+      saddle.position.set(0, 0.90, -0.28);
+
+      bike.add(downTube, seatTube, fork, handlebar, saddle);
+
+      if (!isParked) {
+        frontWheel = fWheel;
+        rearWheel = rWheel;
+      }
+      return bike;
+    }
+
+    function buildAnimatedCyclist() {
+      cyclistGroup = new THREE.Group();
+      cyclistGroup.position.set(0.75, 0.15, appState.cyclistZ);
+      cyclistGroup.name = 'Ciclista_Mobilidade_Suave';
+
+      const bike = createSimpleBikeMesh('#10b981', false);
+      cyclistGroup.add(bike);
+
+      // Farol dianteiro LED da bicicleta
+      const headBulb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.032, 10, 10),
+        new THREE.MeshBasicMaterial({ color: '#ffffff' })
+      );
+      headBulb.position.set(0, 0.88, 0.45);
+      cyclistGroup.add(headBulb);
+
+      cyclistSpotLight = new THREE.SpotLight('#fef3c7', 0.0, 9.0, 0.55, 0.5, 1.2);
+      cyclistSpotLight.position.set(0, 0.88, 0.48);
+      cyclistSpotLight.target.position.set(0, 0.1, 4.5);
+      cyclistGroup.add(cyclistSpotLight, cyclistSpotLight.target);
+
+      // Ciclista estilizado (tronco, braços, capacete e pedaleira animada)
+      const jacketMat = new THREE.MeshStandardMaterial({ color: '#0f172a', roughness: 0.65 });
+      const helmetMat = new THREE.MeshStandardMaterial({ color: '#34d399', roughness: 0.35 });
+      const skinMat = new THREE.MeshStandardMaterial({ color: '#e2a887', roughness: 0.6 });
+
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.52, 0.20), jacketMat);
+      torso.position.set(0, 1.18, -0.08);
+      torso.rotation.x = 0.42;
+      torso.castShadow = true;
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 16), skinMat);
+      head.position.set(0, 1.50, 0.08);
+
+      const helmet = new THREE.Mesh(
+        new THREE.SphereGeometry(0.125, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.58),
+        helmetMat
+      );
+      helmet.position.set(0, 1.51, 0.08);
+
+      // Braços até ao guiador
+      [-0.17, 0.17].forEach(ax => {
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.48, 8), jacketMat);
+        arm.position.set(ax, 1.18, 0.18);
+        arm.rotation.x = 1.05;
+        cyclistGroup.add(arm);
+      });
+
+      // Pedaleira e pernas animadas
+      pedalCrank = new THREE.Group();
+      pedalCrank.position.set(0, 0.42, -0.06);
+      [-0.11, 0.11].forEach((lx, idx) => {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.038, 0.46, 8), jacketMat);
+        leg.position.set(lx, 0.22 + (idx === 0 ? 0.05 : -0.05), 0);
+        pedalCrank.add(leg);
+      });
+
+      cyclistGroup.add(torso, head, helmet, pedalCrank);
+      scene.add(cyclistGroup);
+    }
+
+    /**
+     * 7. SISTEMA DE CHUVA 3D (Simulação Meteorológica e Drenagem)
+     */
+    function buildRainSystem() {
+      const rainCount = 900;
+      const positions = new Float32Array(rainCount * 6);
+
+      for (let i = 0; i < rainCount; i++) {
+        const rx = (Math.random() - 0.5) * 14;
+        const ry = Math.random() * 8;
+        const rz = (Math.random() - 0.5) * 28;
+        positions[i * 6] = rx;
+        positions[i * 6 + 1] = ry;
+        positions[i * 6 + 2] = rz;
+        positions[i * 6 + 3] = rx;
+        positions[i * 6 + 4] = ry - 0.35;
+        positions[i * 6 + 5] = rz;
+      }
+
+      const rainGeo = new THREE.BufferGeometry();
+      rainGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const rainMat = new THREE.LineBasicMaterial({
+        color: '#bae6fd',
+        transparent: true,
+        opacity: 0.55
+      });
+
+      rainPoints = new THREE.LineSegments(rainGeo, rainMat);
+      rainPoints.visible = false;
+      scene.add(rainPoints);
+    }
+
+    /**
+     * ============================================================================
+     * HOTSPOTS 3D E CONTROLO INTERATIVO
+     * ============================================================================
+     */
+    function createHotspotPins() {
+      const layer = document.getElementById('hotspots-layer');
+      layer.innerHTML = '';
+
+      HOTSPOTS_DATA.forEach(item => {
+        const pin = document.createElement('div');
+        pin.className = 'hotspot-pin pointer-events-auto';
+        pin.id = `pin-${item.id}`;
+        pin.innerHTML = `
+          <div class="hotspot-dot">${item.num}</div>
+          <div class="hotspot-label">${item.title}</div>
+        `;
+        pin.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectHotspot(item.id);
+        });
+        layer.appendChild(pin);
+      });
+    }
+
+    function updateHotspotPositions() {
+      const layer = document.getElementById('hotspots-layer');
+      layer.style.display = appState.showHotspots ? 'block' : 'none';
+      if (!appState.showHotspots) return;
+
+      const widthHalf = window.innerWidth / 2;
+      const heightHalf = window.innerHeight / 2;
+
+      HOTSPOTS_DATA.forEach(item => {
+        const pin = document.getElementById(`pin-${item.id}`);
+        if (!pin) return;
+
+        const proj = item.pos3D.clone().project(camera);
+        if (proj.z > 1) {
+          pin.style.opacity = '0';
+          pin.style.pointerEvents = 'none';
+        } else {
+          pin.style.left = `${proj.x * widthHalf + widthHalf}px`;
+          pin.style.top = `${-(proj.y * heightHalf) + heightHalf}px`;
+          pin.style.opacity = '1';
+          pin.style.pointerEvents = 'auto';
+        }
+      });
+    }
+
+    function selectHotspot(id) {
+      const data = HOTSPOTS_DATA.find(h => h.id === id);
+      if (!data) return;
+
+      appState.selectedHotspotId = id;
+      document.querySelectorAll('.hotspot-pin').forEach(p => p.classList.remove('active'));
+      const activePin = document.getElementById(`pin-${id}`);
+      if (activePin) activePin.classList.add('active');
+
+      if (data.camKey && CAMERA_PRESETS[data.camKey]) {
+        focusCamera(data.camKey);
+      }
+
+      document.getElementById('card-badge').textContent = data.badge;
+      document.getElementById('card-title').textContent = data.title;
+      document.getElementById('card-desc').textContent = data.desc;
+      document.getElementById('card-cost').textContent = data.cost;
+      document.getElementById('card-ods').textContent = data.ods;
+
+      document.getElementById('card-specs').innerHTML = data.specs.map(s => `
+        <div class="flex items-start gap-2 text-[11px] text-slate-200 bg-white/5 rounded-xl px-2.5 py-1.5 border border-white/5">
+          <span class="text-emerald-400 font-bold mt-0.5">✓</span>
+          <span>${s}</span>
+        </div>
+      `).join('');
+
+      document.getElementById('info-card').classList.remove('hidden');
+    }
+
+    function setDayNightMode(night) {
+      appState.isNight = night;
+      const btnDay = document.getElementById('btn-day');
+      const btnNight = document.getElementById('btn-night');
+
+      if (night) {
+        scene.background = new THREE.Color('#070d14');
+        scene.fog = new THREE.FogExp2('#070d14', 0.024);
+        hemiLight.intensity = 0.25;
+        hemiLight.color.set('#1e293b');
+        dirLight.intensity = 0.22;
+        dirLight.color.set('#93c5fd');
+        cyclistSpotLight.intensity = 2.4;
+        gardenUplights.forEach(l => (l.intensity = 1.2));
+
+        btnNight.className = 'py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-indigo-500/30 text-indigo-200 border border-indigo-400/40 transition cursor-pointer';
+        btnDay.className = 'py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 text-slate-400 hover:text-white transition cursor-pointer';
+
+        document.getElementById('solar-power-label').textContent = '0 kW (Bateria)';
+        document.getElementById('solar-dot').className = 'w-2 h-2 rounded-full bg-indigo-400';
+      } else {
+        scene.background = new THREE.Color('#cbe4dc');
+        scene.fog = new THREE.FogExp2('#cbe4dc', 0.019);
+        hemiLight.intensity = 0.92;
+        hemiLight.color.set('#f0fdf4');
+        dirLight.intensity = 1.5;
+        dirLight.color.set('#fffbeb');
+        cyclistSpotLight.intensity = 0.0;
+        gardenUplights.forEach(l => (l.intensity = 0.0));
+
+        btnDay.className = 'py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 transition cursor-pointer';
+        btnNight.className = 'py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 text-slate-400 hover:text-white transition cursor-pointer';
+
+        document.getElementById('solar-power-label').textContent = '12,4 kW';
+        document.getElementById('solar-dot').className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
+      }
+
+      updateAirScreenCanvas();
+    }
+
+    function toggleCyclistSimulation() {
+      appState.cyclistActive = !appState.cyclistActive;
+      cyclistGroup.visible = appState.cyclistActive;
+
+      const badge = document.getElementById('cyclist-badge');
+      const dot = document.getElementById('cyclist-dot');
+      if (appState.cyclistActive) {
+        badge.textContent = 'ATIVO';
+        badge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40';
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-ping';
+      } else {
+        badge.textContent = 'PAUSADO';
+        badge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300';
+        dot.className = 'w-2 h-2 rounded-full bg-slate-500';
+      }
+    }
+
+    function toggleRainSimulation() {
+      appState.isRaining = !appState.isRaining;
+      rainPoints.visible = appState.isRaining;
+      waterChannelMat.opacity = appState.isRaining ? 0.78 : 0.0;
+
+      const badge = document.getElementById('rain-badge');
+      if (appState.isRaining) {
+        badge.textContent = 'CHUVA ATIVA';
+        badge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/40';
+        showToast('Drenagem Inteligente: Escoamento pluvial encaminhado para os jardins de chuva.');
+      } else {
+        badge.textContent = 'OFF';
+        badge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300';
+      }
+    }
+
+    function toggleXrayView() {
+      appState.isXray = !appState.isXray;
+      undergroundGroup.visible = appState.isXray;
+
+      const btn = document.getElementById('btn-xray');
+      if (appState.isXray) {
+        btn.classList.add('bg-purple-500/30', 'border-purple-400/60', 'text-purple-200');
+        showToast('Vista Raio-X: Baterias LiFePO4, tubagens drenantes e espira de indução visíveis.');
+      } else {
+        btn.classList.remove('bg-purple-500/30', 'border-purple-400/60', 'text-purple-200');
+      }
+    }
+
+    function focusCamera(presetKey) {
+      const preset = CAMERA_PRESETS[presetKey];
+      if (!preset) return;
+
+      targetCamPos.copy(preset.pos);
+      targetLookAt.copy(preset.target);
+      isCameraAnimating = true;
+
+      document.querySelectorAll('.cam-btn').forEach(btn => {
+        if (btn.dataset.cam === presetKey) {
+          btn.className = 'cam-btn active px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500 text-slate-950 transition whitespace-nowrap cursor-pointer';
+        } else {
+          btn.className = 'cam-btn px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition whitespace-nowrap cursor-pointer';
+        }
+      });
+    }
+
+    /**
+     * ============================================================================
+     * EXPORTAÇÃO PARA WAVEFRONT .OBJ (greeling_ciclovia_3d.obj)
+     * ============================================================================
+     */
+    function exportCicloviaToOBJ() {
+      showToast('A preparar malha 3D para exportação .OBJ...');
+
+      setTimeout(() => {
+        try {
+          cicloviaGroup.updateMatrixWorld(true);
+
+          let output = '# GREELING - Ciclovia Fotovoltaica e Dinamica 3D (L7/A11 Smart Energy)\n';
+          output += '# Projeto Cidade Sustentavel - Modelo Arquitetonico para Blender\n\n';
+
+          let vertexOffset = 1;
+          let normalOffset = 1;
+
+          const v = new THREE.Vector3();
+          const n = new THREE.Vector3();
+          const normalMatrix = new THREE.Matrix3();
+
+          cicloviaGroup.traverse((child) => {
+            if (!child.isMesh || !child.geometry) return;
+            if (!child.visible) return;
+
+            const geo = child.geometry;
+            const posAttr = geo.attributes.position;
+            if (!posAttr) return;
+
+            const normAttr = geo.attributes.normal;
+            const indexAttr = geo.index;
+
+            const objName = (child.name || 'Componente_Ciclovia').replace(/\s+/g, '_');
+            output += `g ${objName}\n`;
+            output += `o ${objName}\n`;
+
+            normalMatrix.getNormalMatrix(child.matrixWorld);
+
+            for (let i = 0; i < posAttr.count; i++) {
+              v.fromBufferAttribute(posAttr, i).applyMatrix4(child.matrixWorld);
+              output += `v ${v.x.toFixed(5)} ${v.y.toFixed(5)} ${v.z.toFixed(5)}\n`;
+            }
+
+            if (normAttr) {
+              for (let i = 0; i < normAttr.count; i++) {
+                n.fromBufferAttribute(normAttr, i).applyMatrix3(normalMatrix).normalize();
+                output += `vn ${n.x.toFixed(5)} ${n.y.toFixed(5)} ${n.z.toFixed(5)}\n`;
+              }
+            }
+
+            if (indexAttr) {
+              for (let i = 0; i < indexAttr.count; i += 3) {
+                const a = indexAttr.getX(i) + vertexOffset;
+                const b = indexAttr.getX(i + 1) + vertexOffset;
+                const c = indexAttr.getX(i + 2) + vertexOffset;
+                if (normAttr) {
+                  const na = indexAttr.getX(i) + normalOffset;
+                  const nb = indexAttr.getX(i + 1) + normalOffset;
+                  const nc = indexAttr.getX(i + 2) + normalOffset;
+                  output += `f ${a}//${na} ${b}//${nb} ${c}//${nc}\n`;
+                } else {
+                  output += `f ${a} ${b} ${c}\n`;
+                }
+              }
+            } else {
+              for (let i = 0; i < posAttr.count; i += 3) {
+                const a = i + vertexOffset;
+                const b = i + 1 + vertexOffset;
+                const c = i + 2 + vertexOffset;
+                if (normAttr) {
+                  output += `f ${a}//${a} ${b}//${b} ${c}//${c}\n`;
+                } else {
+                  output += `f ${a} ${b} ${c}\n`;
+                }
+              }
+            }
+
+            output += '\n';
+            vertexOffset += posAttr.count;
+            if (normAttr) normalOffset += normAttr.count;
+          });
+
+          const blob = new Blob([output], { type: 'text/plain;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'greeling_ciclovia_3d.obj';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+
+          showToast('greeling_ciclovia_3d.obj descarregado com sucesso!');
+        } catch (err) {
+          showToast('Erro ao gerar o ficheiro .OBJ.');
+        }
+      }, 60);
+    }
+
+    let toastTimeout;
+    function showToast(msg) {
+      const box = document.getElementById('toast-box');
+      document.getElementById('toast-message').textContent = msg;
+      box.classList.remove('translate-y-6', 'opacity-0');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        box.classList.add('translate-y-6', 'opacity-0');
+      }, 3400);
+    }
+
+    function bindUIEvents() {
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      document.getElementById('btn-day').addEventListener('click', () => setDayNightMode(false));
+      document.getElementById('btn-night').addEventListener('click', () => setDayNightMode(true));
+      document.getElementById('btn-cyclist').addEventListener('click', toggleCyclistSimulation);
+      document.getElementById('btn-rain').addEventListener('click', toggleRainSimulation);
+      document.getElementById('btn-xray').addEventListener('click', toggleXrayView);
+      document.getElementById('btn-export-obj').addEventListener('click', exportCicloviaToOBJ);
+
+      document.getElementById('btn-toggle-hotspots').addEventListener('click', (e) => {
+        appState.showHotspots = !appState.showHotspots;
+        e.currentTarget.classList.toggle('opacity-50', !appState.showHotspots);
+      });
+
+      document.getElementById('toggle-sim-panel').addEventListener('click', (e) => {
+        const body = document.getElementById('sim-panel-body');
+        const hidden = body.classList.toggle('hidden');
+        e.currentTarget.textContent = hidden ? '+' : '−';
+      });
+
+      document.getElementById('close-info-card').addEventListener('click', () => {
+        document.getElementById('info-card').classList.add('hidden');
+        document.querySelectorAll('.hotspot-pin').forEach(p => p.classList.remove('active'));
+        appState.selectedHotspotId = null;
+      });
+
+      const budgetModal = document.getElementById('budget-modal');
+      document.getElementById('btn-budget').addEventListener('click', () => {
+        budgetModal.classList.remove('hidden');
+        budgetModal.classList.add('flex');
+      });
+      document.getElementById('close-budget-modal').addEventListener('click', () => {
+        budgetModal.classList.add('hidden');
+        budgetModal.classList.remove('flex');
+      });
+      budgetModal.addEventListener('click', (e) => {
+        if (e.target === budgetModal) {
+          budgetModal.classList.add('hidden');
+          budgetModal.classList.remove('flex');
+        }
+      });
+
+      document.querySelectorAll('.cam-btn').forEach(btn => {
+        btn.addEventListener('click', () => focusCamera(btn.dataset.cam));
+      });
+    }
+
+    /**
+     * ============================================================================
+     * LOOP DE ANIMAÇÃO (Ciclista, Onda LED PIR, Chuva, Contador e Raio-X)
+     * ============================================================================
+     */
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = Math.min(clock.getDelta(), 0.05);
+      const elapsed = clock.getElapsedTime();
+
+      // 1. Movimento contínuo do ciclista e acionamento do contador por espira de indução
+      if (appState.cyclistActive && cyclistGroup) {
+        const speed = 3.6; // m/s (~13 km/h)
+        appState.cyclistZ += speed * delta;
+        if (appState.cyclistZ > 13.0) {
+          appState.cyclistZ = -13.0;
+          appState.lastLoopTrigger = false;
+        }
+
+        cyclistGroup.position.z = appState.cyclistZ;
+        if (frontWheel && rearWheel && pedalCrank) {
+          frontWheel.rotation.x += speed * delta * 2.8;
+          rearWheel.rotation.x += speed * delta * 2.8;
+          pedalCrank.rotation.x += speed * delta * 2.4;
+        }
+
+        // Verifica passagem pela espira de indução em z = -10.8
+        if (!appState.lastLoopTrigger && appState.cyclistZ >= -10.8 && appState.cyclistZ <= -10.0) {
+          appState.lastLoopTrigger = true;
+          appState.cyclistsToday += 1;
+          appState.cyclistsAnnual += 1;
+          document.getElementById('hud-cyclist-count').textContent =
+            appState.cyclistsToday.toLocaleString('pt-PT');
+
+          updateCounterScreenCanvas(true);
+          if (inductionLoopMat) inductionLoopMat.emissiveIntensity = 2.5;
+          setTimeout(() => {
+            updateCounterScreenCanvas(false);
+            if (inductionLoopMat) inductionLoopMat.emissiveIntensity = 0.8;
+          }, 450);
+        }
+      }
+
+      // 2. Iluminação LED Embutida Inteligente (Onda progressiva à frente do ciclista, Eco 15% atrás)
+      const baseEcoIntensity = appState.isNight ? 0.22 : 0.08;
+      const peakIntensity = appState.isNight ? 2.6 : 1.1;
+
+      for (let i = 0; i < ledSegmentsLeft.length; i++) {
+        const seg = ledSegmentsLeft[i];
+        const segR = ledSegmentsRight[i];
+        let targetInt = baseEcoIntensity;
+
+        if (appState.cyclistActive) {
+          const dz = seg.z - appState.cyclistZ;
+          if (dz >= -1.8 && dz <= 7.5) {
+            const factor = dz >= 0 ? 1 - dz / 8.0 : 1 + dz / 2.2;
+            targetInt = baseEcoIntensity + (peakIntensity - baseEcoIntensity) * Math.max(0, factor);
+          }
+        }
+
+        seg.mat.emissiveIntensity += (targetInt - seg.mat.emissiveIntensity) * 0.18;
+        segR.mat.emissiveIntensity = seg.mat.emissiveIntensity;
+      }
+
+      // 3. Animação de Chuva & Escoamento Pluvial
+      if (appState.isRaining && rainPoints) {
+        const pos = rainPoints.geometry.attributes.position.array;
+        for (let i = 0; i < pos.length; i += 6) {
+          pos[i + 1] -= 13.5 * delta;
+          pos[i + 4] -= 13.5 * delta;
+          if (pos[i + 1] < 0.1) {
+            const newY = 7.5 + Math.random() * 1.5;
+            pos[i + 1] = newY;
+            pos[i + 4] = newY - 0.35;
+          }
+        }
+        rainPoints.geometry.attributes.position.needsUpdate = true;
+        waterChannelMat.emissiveIntensity = 0.35 + Math.sin(elapsed * 8) * 0.15;
+      }
+
+      // 4. Transição suave da Vista Raio-X / Subterrânea
+      const targetOpacity = appState.isXray ? 0.24 : 1.0;
+      xrayShellMaterials.forEach(mat => {
+        mat.opacity += (targetOpacity - mat.opacity) * 0.12;
+      });
+
+      // 5. Interpolação suave de câmara
+      if (isCameraAnimating) {
+        camera.position.lerp(targetCamPos, 0.075);
+        controls.target.lerp(targetLookAt, 0.075);
+        if (camera.position.distanceTo(targetCamPos) < 0.04 && controls.target.distanceTo(targetLookAt) < 0.04) {
+          isCameraAnimating = false;
+        }
+      }
+
+      controls.update();
+      updateHotspotPositions();
+      renderer.render(scene, camera);
+    }
+
+    window.onload = function () {
+      initScene();
+    };
+  </script>
+</body>
+</html>

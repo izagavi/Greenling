@@ -1,0 +1,2474 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>GREELING — Parque Sustentável Inteligente 3D (L7/A11 Smart Energy)</title>
+
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Three.js r128 e OrbitControls via CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #080d11;
+      color: #f1f5f9;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+
+    /* Painéis HUD em vidro escuro GREELING */
+    .hud-glass {
+      background: rgba(13, 21, 30, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.48);
+    }
+
+    .hud-glass-emerald {
+      background: rgba(10, 23, 22, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(16, 185, 129, 0.38);
+      box-shadow: 0 14px 38px rgba(0, 0, 0, 0.58);
+    }
+
+    /* Hotspots 3D projetados */
+    .hotspot-pin {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      z-index: 15;
+      cursor: pointer;
+      transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s ease;
+    }
+
+    .hotspot-pin:hover {
+      transform: translate(-50%, -50%) scale(1.14);
+      z-index: 25;
+    }
+
+    .hotspot-dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 9999px;
+      background: rgba(16, 185, 129, 0.94);
+      border: 2px solid #ffffff;
+      color: #042f2e;
+      font-weight: 800;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.25), 0 4px 12px rgba(0, 0, 0, 0.6);
+      position: relative;
+    }
+
+    .hotspot-dot::after {
+      content: '';
+      position: absolute;
+      inset: -5px;
+      border-radius: 9999px;
+      border: 1.5px solid rgba(16, 185, 129, 0.65);
+      animation: pulseRing 2.2s infinite ease-out;
+    }
+
+    .hotspot-pin.active .hotspot-dot {
+      background: #ffffff;
+      color: #065f46;
+      border-color: #10b981;
+      box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.45);
+    }
+
+    .hotspot-label {
+      position: absolute;
+      left: 34px;
+      top: 50%;
+      transform: translateY(-50%);
+      white-space: nowrap;
+      background: rgba(9, 14, 19, 0.9);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #ecfdf5;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 9px;
+      border-radius: 8px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .hotspot-pin:hover .hotspot-label,
+    .hotspot-pin.active .hotspot-label {
+      opacity: 1;
+    }
+
+    @keyframes pulseRing {
+      0% { transform: scale(0.9); opacity: 0.9; }
+      100% { transform: scale(1.65); opacity: 0; }
+    }
+
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.03);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(16, 185, 129, 0.35);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Contentor do Canvas 3D -->
+  <div id="canvas-container"></div>
+
+  <!-- Camada de Hotspots 3D -->
+  <div id="hotspots-layer" class="fixed inset-0 pointer-events-none z-10 overflow-hidden"></div>
+
+  <!-- Ecrã de Carregamento Inicial -->
+  <div id="loader-screen" class="fixed inset-0 z-50 bg-[#080d11] flex flex-col items-center justify-center transition-opacity duration-500">
+    <div class="w-16 h-16 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center mb-4 animate-pulse">
+      <svg class="w-9 h-9 text-emerald-400" viewBox="0 0 36 36" fill="none">
+        <path d="M18 3L5 9V18C5 26.2 10.5 33.6 18 35.5C25.5 33.6 31 26.2 31 18V9L18 3Z" stroke="currentColor" stroke-width="2.2" fill="rgba(16,185,129,0.12)"/>
+        <path d="M18 26V14M18 18C14 18 12 15 12 12C15 12 18 14.5 18 18ZM18 16C22 16 24 13 24 10C21 10 18 12.5 18 16Z" stroke="#34d399" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <h1 class="text-lg font-bold tracking-wider text-white">GREELING <span class="text-emerald-400 font-normal">| PARQUE SUSTENTÁVEL 3D</span></h1>
+    <p class="text-xs text-slate-400 mt-1">A gerar lago de fito-depuração, jardim de chuva, bancos solares e hotel de insetos...</p>
+  </div>
+
+  <!-- BARRA SUPERIOR (Identidade GREELING + ODS + Telemetria + Orçamento + Exportar .OBJ) -->
+  <header class="fixed top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+    <!-- Logótipo e Título -->
+    <div class="hud-glass rounded-2xl px-3.5 py-2.5 flex items-center gap-3 pointer-events-auto">
+      <div class="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center shrink-0">
+        <svg class="w-6 h-6 text-emerald-400" viewBox="0 0 36 36" fill="none">
+          <path d="M18 3L5 9V18C5 26.2 10.5 33.6 18 35.5C25.5 33.6 31 26.2 31 18V9L18 3Z" stroke="currentColor" stroke-width="2.2" fill="rgba(16,185,129,0.15)"/>
+          <path d="M18 26V14M18 18C14 18 12 15 12 12C15 12 18 14.5 18 18ZM18 16C22 16 24 13 24 10C21 10 18 12.5 18 16Z" stroke="#34d399" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="font-extrabold tracking-wide text-sm sm:text-base text-white">GREELING</span>
+          <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+            Parque Sustentável
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-400 hidden sm:block">L7/A11 Smart Energy • Biodiversidade, Fito-depuração & Mobiliário Solar</p>
+      </div>
+
+      <!-- Badges ODS 6, 7, 11, 13, 15 -->
+      <div class="hidden xl:flex items-center gap-1 ml-2 pl-3 border-l border-white/10">
+        <span title="ODS 6: Água Potável e Saneamento" class="px-1.5 py-1 rounded-lg bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 text-[10px] font-bold">ODS 6</span>
+        <span title="ODS 7: Energia Limpa e Acessível" class="px-1.5 py-1 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] font-bold">ODS 7</span>
+        <span title="ODS 11: Cidades e Comunidades Sustentáveis" class="px-1.5 py-1 rounded-lg bg-orange-500/20 border border-orange-400/40 text-orange-300 text-[10px] font-bold">ODS 11</span>
+        <span title="ODS 15: Proteger a Vida Terrestre" class="px-1.5 py-1 rounded-lg bg-emerald-600/25 border border-emerald-400/40 text-emerald-300 text-[10px] font-bold">ODS 15.1</span>
+      </div>
+    </div>
+
+    <!-- Telemetria e Botões Principais -->
+    <div class="flex items-center gap-2 pointer-events-auto">
+      <!-- Telemetria Ecológica em Tempo Real -->
+      <div class="hud-glass rounded-2xl px-3 py-2 hidden lg:flex items-center gap-3 text-xs">
+        <div class="flex items-center gap-1.5">
+          <span id="water-dot" class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+          <span class="text-slate-400">Reservatório Lago:</span>
+          <span id="hud-water-level" class="font-bold text-cyan-300">94% (Fito-Pura)</span>
+        </div>
+        <div class="w-px h-4 bg-white/10"></div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-slate-400">Polinizadores:</span>
+          <span class="font-bold text-emerald-400">Ativos (ODS 15.1)</span>
+        </div>
+        <div class="w-px h-4 bg-white/10"></div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-slate-400">Iluminação:</span>
+          <span id="hud-light-status" class="font-bold text-amber-300">DIA (Solar)</span>
+        </div>
+      </div>
+
+      <!-- Botão Orçamento Completo (Slide 29) -->
+      <button id="btn-budget" class="hud-glass hover:border-emerald-400/50 text-slate-200 hover:text-white rounded-2xl px-3 py-2.5 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
+        <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+        </svg>
+        <span class="hidden sm:inline">Orçamento</span>
+        <span class="text-emerald-400 font-bold">~175.150 €</span>
+      </button>
+
+      <!-- Botão Exportar .OBJ -->
+      <button id="btn-export-obj" class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-2xl px-3.5 py-2.5 text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-950/50 border border-emerald-400/30 transition cursor-pointer">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3"/>
+        </svg>
+        <span>Exportar .OBJ</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- PAINEL DE CONTROLO ESQUERDO (Colapsável) -->
+  <aside id="sim-panel" class="fixed left-3 top-20 z-20 w-64 sm:w-72 hud-glass rounded-2xl p-3.5 transition-all duration-300">
+    <div class="flex items-center justify-between mb-2.5">
+      <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        Simulação Ecológica
+      </span>
+      <button id="toggle-sim-panel" class="text-slate-400 hover:text-white text-xs px-2 py-0.5 rounded-lg hover:bg-white/10 cursor-pointer" title="Minimizar/Expandir">
+        −
+      </button>
+    </div>
+
+    <div id="sim-panel-body" class="space-y-2">
+      <!-- Ciclo Dia / Crepúsculo / Noite -->
+      <div class="grid grid-cols-3 gap-1 p-1 rounded-xl bg-black/40 border border-white/5">
+        <button id="btn-time-day" class="time-btn py-1.5 px-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1 bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 transition cursor-pointer">
+          Dia
+        </button>
+        <button id="btn-time-dusk" class="time-btn py-1.5 px-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1 text-slate-400 hover:text-white transition cursor-pointer">
+          Crepúsculo
+        </button>
+        <button id="btn-time-night" class="time-btn py-1.5 px-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1 text-slate-400 hover:text-white transition cursor-pointer">
+          Noite
+        </button>
+      </div>
+
+      <!-- Simulação de Chuva & Ciclo Hídrico (Fito-depuração e Rega) -->
+      <button id="btn-rain" class="w-full py-2 px-3 rounded-xl bg-white/5 hover:bg-cyan-500/20 border border-white/10 hover:border-cyan-400/40 text-left text-xs font-medium flex items-center justify-between transition cursor-pointer">
+        <span class="flex items-center gap-2">
+          <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/><path stroke-linecap="round" stroke-linejoin="round" d="M8 19v2m4-2v2m4-2v2"/></svg>
+          <span>Chuva & Ciclo Hídrico</span>
+        </span>
+        <span id="rain-badge" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">OFF</span>
+      </button>
+
+      <!-- Visitantes & Sensores PIR de Baixo Impacto -->
+      <button id="btn-visitors" class="w-full py-2 px-3 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-left text-xs font-medium flex items-center justify-between transition cursor-pointer">
+        <span class="flex items-center gap-2 text-emerald-100">
+          <span id="visitors-dot" class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          <span>Visitantes (Sensores PIR)</span>
+        </span>
+        <span id="visitors-badge" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40">ATIVO</span>
+      </button>
+
+      <!-- Leitor Interativo QR Code (ODS 15.1) -->
+      <button id="btn-qr-scan" class="w-full py-2 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/30 text-left text-xs font-medium flex items-center justify-between transition cursor-pointer">
+        <span class="flex items-center gap-2 text-amber-200">
+          <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
+          <span>Ler QR Code (ODS 15.1)</span>
+        </span>
+        <span class="text-[10px] font-bold text-amber-300">ABRIR</span>
+      </button>
+
+      <!-- Vista Raio-X (Subsolo & Infraestrutura) & Pins -->
+      <div class="pt-1 border-t border-white/10 flex items-center justify-between gap-2">
+        <button id="btn-xray" class="flex-1 py-2 px-2.5 rounded-xl bg-white/5 hover:bg-purple-500/20 border border-white/10 hover:border-purple-400/40 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer">
+          <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m-2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l-2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l-2-1v-2.5"/></svg>
+          <span>Vista Raio-X</span>
+        </button>
+
+        <button id="btn-toggle-hotspots" class="py-2 px-2.5 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-xs font-semibold transition cursor-pointer" title="Mostrar/Ocultar Pontos Técnicos">
+          Pins
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- CARTÃO TÉCNICO / PEDAGÓGICO DO COMPONENTE SELECIONADO (Direita) -->
+  <section id="info-card" class="fixed right-3 top-20 z-20 w-80 sm:w-96 hud-glass-emerald rounded-2xl p-4 hidden transition-all duration-300 max-h-[72vh] overflow-y-auto">
+    <div class="flex items-start justify-between gap-2">
+      <div>
+        <span id="card-badge" class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+          Ecossistema Local • ODS 15.1
+        </span>
+        <h2 id="card-title" class="text-base font-bold text-white mt-1.5">Hotel de Insetos & Biodiversidade</h2>
+      </div>
+      <button id="close-info-card" class="w-7 h-7 rounded-xl bg-white/5 hover:bg-white/15 flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer">
+        ✕
+      </button>
+    </div>
+
+    <!-- Cartão QR Code ilustrativo quando aberto via QR Code -->
+    <div id="card-qr-banner" class="hidden mt-2.5 p-2.5 rounded-xl bg-emerald-950/70 border border-emerald-500/30 flex items-center gap-3">
+      <div class="w-11 h-11 rounded-lg bg-white p-1 shrink-0 flex items-center justify-center">
+        <svg class="w-full h-full text-slate-900" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm13-2h3v2h-3v-2zm-5 0h3v4h-3v-4zm5 4h3v4h-3v-4zm-5 2h3v2h-3v-2z"/>
+        </svg>
+      </div>
+      <div class="text-[11px] leading-snug">
+        <span class="font-bold text-emerald-300 block">Sinalética Interativa GREELING</span>
+        <span class="text-slate-300">Guia pedagógico sobre ecologia urbana, polinizadores e ciclo natural da água.</span>
+      </div>
+    </div>
+
+    <p id="card-desc" class="text-xs text-slate-300 leading-relaxed mt-2.5"></p>
+    <div id="card-specs" class="mt-3 space-y-1.5"></div>
+
+    <div class="mt-4 pt-3 border-t border-emerald-500/20 flex items-center justify-between">
+      <div>
+        <span class="text-[10px] uppercase tracking-wider text-slate-400 block">Custo Unitário (Slide 29)</span>
+        <span id="card-cost" class="text-sm font-extrabold text-emerald-400">650 € / unid.</span>
+      </div>
+      <span id="card-ods" class="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+        ODS 15.1 • Fauna Local
+      </span>
+    </div>
+  </section>
+
+  <!-- MODAL DO ORÇAMENTO COMPLETO DO PARQUE (Página 29 da Apresentação) -->
+  <div id="budget-modal" class="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="hud-glass-emerald rounded-3xl max-w-lg w-full p-5 sm:p-6 max-h-[85vh] overflow-y-auto">
+      <div class="flex items-center justify-between pb-3 border-b border-white/10">
+        <div>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Custos de Material — Mobilidade Parques (Slide 29)</span>
+          <h3 class="text-lg font-extrabold text-white">Orçamento Estimado do Parque</h3>
+        </div>
+        <button id="close-budget-modal" class="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white cursor-pointer">✕</button>
+      </div>
+
+      <div class="mt-3 divide-y divide-white/5 text-xs">
+        <div class="py-2.5 flex justify-between"><span class="text-slate-300">Jardins de Chuva (Drenagem Natural)</span><span class="font-bold text-white">80 € / m²</span></div>
+        <div class="py-2.5 flex justify-between"><span class="text-slate-300">Lago Artificial Autossustentável (Fito-depuração)</span><span class="font-bold text-white">220 € / m²</span></div>
+        <div class="py-2.5 flex justify-between"><span class="text-slate-300">Banco Solar Inteligente (Carregamento Indutivo)</span><span class="font-bold text-white">4.800 €</span></div>
+        <div class="py-2.5 flex justify-between"><span class="text-slate-300">Poste Solar de Baixo Impacto (Sensor PIR)</span><span class="font-bold text-white">1.400 €</span></div>
+        <div class="py-2.5 flex justify-between"><span class="text-slate-300">Corredores de Polinizadores (Flora Nativa)</span><span class="font-bold text-white">45 € / m²</span></div>
+        <div class="py-2.5 flex justify-between"><span class="text-slate-300">Hotéis de Insetos & Abrigos para Fauna Local</span><span class="font-bold text-white">650 € / unid.</span></div>
+      </div>
+
+      <div class="mt-4 pt-3 border-t border-emerald-500/30 flex items-center justify-between">
+        <span class="text-xs text-slate-300 font-medium">Total estimado / parque</span>
+        <span class="text-xl font-extrabold text-emerald-400">~175.150 €</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- BARRA INFERIOR DE PRESETS DE CÂMARA -->
+  <nav class="fixed bottom-3 left-3 right-3 z-20 flex flex-col items-center gap-2 pointer-events-none">
+    <div class="hud-glass rounded-2xl p-1.5 flex items-center gap-1 overflow-x-auto max-w-full pointer-events-auto">
+      <button data-cam="geral" class="cam-btn active px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500 text-slate-950 transition whitespace-nowrap cursor-pointer">
+        Vista Geral
+      </button>
+      <button data-cam="lago" class="cam-btn px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition whitespace-nowrap cursor-pointer">
+        Lago Autossustentável
+      </button>
+      <button data-cam="jardim" class="cam-btn px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition whitespace-nowrap cursor-pointer">
+        Jardim de Chuva & Pavilhão
+      </button>
+      <button data-cam="bancos" class="cam-btn px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition whitespace-nowrap cursor-pointer">
+        Bancos Solares
+      </button>
+      <button data-cam="insetos" class="cam-btn px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition whitespace-nowrap cursor-pointer">
+        Corredor & Hotel de Insetos
+      </button>
+      <button data-cam="aerea" class="cam-btn px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition whitespace-nowrap cursor-pointer">
+        Vista Aérea
+      </button>
+    </div>
+  </nav>
+
+  <!-- NOTIFICAÇÃO TOAST -->
+  <div id="toast-box" class="fixed bottom-16 right-4 z-50 hud-glass-emerald rounded-2xl px-4 py-3 text-xs text-white font-medium shadow-2xl transform translate-y-6 opacity-0 pointer-events-none transition-all duration-300 flex items-center gap-2.5">
+    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+    <span id="toast-message">Ficheiro exportado com sucesso!</span>
+  </div>
+
+  <script>
+    /**
+     * ============================================================================
+     * GREELING — PARQUE SUSTENTÁVEL INTELIGENTE 3D (L7/A11 SMART ENERGY)
+     * Modelo arquitetónico e ecológico completo baseado na apresentação
+     * "Cidade Sustentável" (Páginas 26, 27, 28 e 29)
+     * ============================================================================
+     */
+
+    const appState = {
+      timeOfDay: 'day', // 'day' | 'dusk' | 'night'
+      isRaining: false,
+      visitorsActive: true,
+      isXray: false,
+      showHotspots: true,
+      selectedHotspotId: null
+    };
+
+    // Hotspots técnicos e pedagógicos (fiéis às páginas 26, 27, 28 e 29)
+    const HOTSPOTS_DATA = [
+      {
+        id: 'lago',
+        num: '1',
+        title: 'Lago Artificial Autossustentável',
+        badge: 'Fito-depuração & Rega (ODS 6 & 11)',
+        pos3D: new THREE.Vector3(6.2, 0.75, -1.2),
+        camKey: 'lago',
+        cost: '220 € / m²',
+        ods: 'ODS 6 & 11 • Água Pura',
+        isQR: false,
+        desc: 'Lago ornamental e ecológico alimentado exclusivamente por captação de água da chuva e tratado através de filtragem biológica por plantas aquáticas (juncos, tabúas e nenúfares) e 2 unidades flutuantes solares de arejamento.',
+        specs: [
+          'Fito-depuração natural sem produtos químicos através de macrófitas aquáticas',
+          '2 plataformas solares flutuantes promovem oxigenação e circulação da água',
+          'Funciona como reservatório hídrico para a rega automática de todo o parque',
+          'Passadiço curvo em madeira tratada com iluminação LED embutida de baixo impacto'
+        ]
+      },
+      {
+        id: 'jardim_chuva',
+        num: '2',
+        title: 'Jardim de Chuva & Pavilhão Verde',
+        badge: 'Drenagem Natural (ODS 11 & 15)',
+        pos3D: new THREE.Vector3(-6.2, 1.35, -2.5),
+        camKey: 'jardim',
+        cost: '80 € / m²',
+        ods: 'ODS 11 & 15 • Drenagem Natural',
+        isQR: false,
+        desc: 'Depressão natural no terreno com solo poroso, leito de seixos de rio e flora nativa higrófila que retém e filtra a água pluvial captada pelo telhado ajardinado inclinado do pavilhão moderno de vidro e madeira.',
+        specs: [
+          'Caleira no pavilhão encaminha a chuva da cobertura verde para o leito de seixos',
+          'Previne inundações urbanas e recarrega o lençol freático e o lago autossustentável',
+          'Ponte pedonal em madeira tratada atravessa o jardim de chuva com segurança',
+          'Ative "Chuva & Ciclo Hídrico" e "Vista Raio-X" para ver o escoamento subterrâneo'
+        ]
+      },
+      {
+        id: 'banco_solar',
+        num: '3',
+        title: 'Banco Solar com Carregamento Indutivo',
+        badge: 'Mobiliário Inteligente (ODS 7 & 11)',
+        pos3D: new THREE.Vector3(-1.5, 1.85, -4.4),
+        camKey: 'bancos',
+        cost: '4.800 € / unid.',
+        ods: 'ODS 7 • Carregamento Sem Fios',
+        isQR: false,
+        desc: 'Banco arquitetónico curvo em ripas de madeira tratada e estrutura metálica antracite sobre deck de madeira com vista para o lago, equipado com painéis solares discretos no topo, iluminação LED quente e bases de carregamento por indução.',
+        specs: [
+          'Painéis fotovoltaicos integrados no topo da cobertura curva em C',
+          '2 bases de carregamento sem fios por indução (Qi) + portas USB protegidas',
+          'Iluminação LED indireta quente integrada no arco interior para conforto noturno'
+        ]
+      },
+      {
+        id: 'poste_solar',
+        num: '4',
+        title: 'Iluminação Solar de Baixo Impacto',
+        badge: 'Proteção Ecossistemas Noturnos',
+        pos3D: new THREE.Vector3(0.4, 2.85, 2.2),
+        camKey: 'geral',
+        cost: '1.400 € / unid.',
+        ods: 'ODS 7 & 15 • Zero Poluição Luminosa',
+        isQR: false,
+        desc: 'Postes minimalistas alimentados a energia solar com sensores de presença PIR e ótica direcionada exclusivamente para o pavimento, evitando poluição luminosa e protegendo aves, morcegos e insetos noturnos.',
+        specs: [
+          'Luz direcionada para o chão sem dispersão para o céu noturno',
+          'Opera em Modo Eco (15%) e sobe para 100% quando deteta visitantes próximos',
+          '100% autónomo da rede elétrica graças ao módulo fotovoltaico superior'
+        ]
+      },
+      {
+        id: 'hotel_insetos',
+        num: '5',
+        title: 'Corredor de Polinizadores & Hotel de Insetos',
+        badge: 'Ecossistema Local • ODS 15.1',
+        pos3D: new THREE.Vector3(-3.8, 1.55, -8.8),
+        camKey: 'insetos',
+        cost: '650 € / unid. (Abrigo) + 45 € / m² (Flora)',
+        ods: 'ODS 15.1 • Biodiversidade Urbana',
+        isQR: true,
+        desc: 'Santuário ecológico composto por flora nativa melífera (equináceas roxas, rudbéquias amarelas e alfazema), Hotel de Insetos solar em madeira, abrigo para ouriços, caixa-ninho e totem pedagógico com QR Code.',
+        specs: [
+          'Compartimentos de madeira com troncos perfurados, bambu, pinhas e terracota para abelhas solitárias e joaninhas',
+          'Abrigo térreo em madeira para ouriços e fauna auxiliar do parque',
+          'Caixa-ninho elevada para aves insetívoras e totem solar com QR Code educativo'
+        ]
+      }
+    ];
+
+    // Predefinições suaves de câmara
+    const CAMERA_PRESETS = {
+      geral: { pos: new THREE.Vector3(-12.8, 8.2, 14.5), target: new THREE.Vector3(-0.5, 0.8, -1.5) },
+      lago: { pos: new THREE.Vector3(11.8, 4.6, 8.5), target: new THREE.Vector3(5.2, 0.4, -0.5) },
+      jardim: { pos: new THREE.Vector3(-12.2, 4.4, 5.8), target: new THREE.Vector3(-6.8, 1.1, -1.8) },
+      bancos: { pos: new THREE.Vector3(-4.6, 2.6, -1.4), target: new THREE.Vector3(-1.3, 1.1, -4.3) },
+      insetos: { pos: new THREE.Vector3(-1.2, 2.2, -5.6), target: new THREE.Vector3(-3.8, 1.0, -8.8) },
+      aerea: { pos: new THREE.Vector3(0.0, 21.5, 16.5), target: new THREE.Vector3(-0.5, 0.0, -1.2) }
+    };
+
+    // Variáveis globais Three.js
+    let scene, camera, renderer, controls;
+    let parkGroup;
+    let hemiLight, dirLight;
+    let lakeWaterMesh, lakeWaterGeo, lakeBasePositions;
+    let rainPoints, roofRunoffMat, rainStreamMat;
+    let undergroundGroup;
+
+    const floatingAerators = [];
+    const solarPoles = [];
+    const benchLights = [];
+    const boardwalkLedMats = [];
+    const butterflies = [];
+    const bees = [];
+    const visitors = [];
+    const sprinklers = [];
+    const xrayMaterials = [];
+
+    let visitorCurve;
+    let targetCamPos = CAMERA_PRESETS.geral.pos.clone();
+    let targetLookAt = CAMERA_PRESETS.geral.target.clone();
+    let isCameraAnimating = false;
+
+    /**
+     * ============================================================================
+     * TEXTURAS PROCEDIMENTAIS (Madeira, QR Code, Painéis Solares, Placas)
+     * ============================================================================
+     */
+
+    function createWoodTexture(baseHex = '#8d5b32') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = baseHex;
+      ctx.fillRect(0, 0, 512, 512);
+
+      for (let i = 0; i < 160; i++) {
+        const y = Math.random() * 512;
+        ctx.strokeStyle = i % 2 === 0 ? 'rgba(46, 24, 8, 0.2)' : 'rgba(195, 140, 88, 0.16)';
+        ctx.lineWidth = 1 + Math.random() * 2.5;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.bezierCurveTo(170, y + (Math.random() - 0.5) * 14, 340, y + (Math.random() - 0.5) * 14, 512, y);
+        ctx.stroke();
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      return tex;
+    }
+
+    function createSolarTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#0c1e38';
+      ctx.fillRect(0, 0, 256, 256);
+
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.45)';
+      ctx.lineWidth = 1.5;
+      const step = 32;
+      for (let y = 0; y < 256; y += step) {
+        for (let x = 0; x < 256; x += step) {
+          ctx.strokeRect(x + 1, y + 1, step - 2, step - 2);
+        }
+      }
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    // Placa informativa com QR Code para o Hotel de Insetos (Página 28)
+    function createQRSignTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 768;
+      const ctx = canvas.getContext('2d');
+
+      // Fundo verde-floresta escuro
+      ctx.fillStyle = '#11261e';
+      ctx.fillRect(0, 0, 512, 768);
+
+      ctx.strokeStyle = '#34d399';
+      ctx.lineWidth = 8;
+      ctx.strokeRect(14, 14, 484, 740);
+
+      // Cabeçalho GREELING
+      ctx.fillStyle = '#6ee7b7';
+      ctx.font = '800 26px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('GREELING • ODS 15.1', 256, 68);
+
+      // Cartão branco do QR Code
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(116, 110, 280, 280);
+
+      // Desenho determinístico de matriz QR Code de alta nitidez
+      ctx.fillStyle = '#0f172a';
+      const cells = 21;
+      const cSize = 240 / cells;
+      const ox = 136;
+      const oy = 130;
+
+      function drawFinder(fx, fy) {
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(ox + fx * cSize, oy + fy * cSize, 7 * cSize, 7 * cSize);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(ox + (fx + 1) * cSize, oy + (fy + 1) * cSize, 5 * cSize, 5 * cSize);
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(ox + (fx + 2) * cSize, oy + (fy + 2) * cSize, 3 * cSize, 3 * cSize);
+      }
+
+      drawFinder(0, 0);
+      drawFinder(14, 0);
+      drawFinder(0, 14);
+
+      ctx.fillStyle = '#0f172a';
+      for (let r = 0; r < cells; r++) {
+        for (let c = 0; c < cells; c++) {
+          const inFinder =
+            (r < 8 && c < 8) ||
+            (r < 8 && c > 12) ||
+            (r > 12 && c < 8);
+          if (inFinder) continue;
+          if ((r * 7 + c * 13 + (r ^ c)) % 3 === 0) {
+            ctx.fillRect(ox + c * cSize, oy + r * cSize, cSize - 0.8, cSize - 0.8);
+          }
+        }
+      }
+
+      // Texto pedagógico inferior (fiel à pág. 28)
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '800 32px Inter, sans-serif';
+      ctx.fillText('ECOSSISTEMA', 256, 465);
+      ctx.fillText('LOCAL & HOTÉIS', 256, 508);
+      ctx.fillText('DE INSETOS', 256, 551);
+
+      ctx.fillStyle = '#34d399';
+      ctx.font = '800 30px Inter, sans-serif';
+      ctx.fillText('— ODS 15.1 —', 256, 608);
+
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '600 20px Inter, sans-serif';
+      ctx.fillText('Aponte a câmara ou clique', 256, 668);
+      ctx.fillText('para explorar a fauna local', 256, 696);
+
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    // Placas informativas do Lago, Jardim de Chuva e Corredor de Polinizadores
+    function createEcoPlaqueTexture(line1, line2, badgeText, accentColor = '#34d399') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 320;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#0f1d1a';
+      ctx.fillRect(0, 0, 512, 320);
+
+      ctx.strokeStyle = accentColor;
+      ctx.lineWidth = 6;
+      ctx.strokeRect(10, 10, 492, 300);
+
+      ctx.fillStyle = accentColor;
+      ctx.font = '800 22px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(badgeText, 256, 65);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '800 28px Inter, sans-serif';
+      ctx.fillText(line1, 256, 145);
+      ctx.fillText(line2, 256, 188);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '600 18px Inter, sans-serif';
+      ctx.fillText('GREELING • SUSTAINABLE URBAN SYSTEMS', 256, 265);
+
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    /**
+     * ============================================================================
+     * INICIALIZAÇÃO DA CENA 3D E CONSTRUÇÃO DOS ELEMENTOS DO PARQUE
+     * ============================================================================
+     */
+    function initScene() {
+      const container = document.getElementById('canvas-container');
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color('#cce6dc');
+      scene.fog = new THREE.FogExp2('#cce6dc', 0.016);
+
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 160);
+      camera.position.copy(CAMERA_PRESETS.geral.pos);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.06;
+      container.appendChild(renderer.domElement);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.target.copy(CAMERA_PRESETS.geral.target);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.065;
+      controls.maxPolarAngle = Math.PI * 0.485;
+      controls.minDistance = 1.6;
+      controls.maxDistance = 36;
+      controls.update();
+
+      controls.addEventListener('start', () => {
+        isCameraAnimating = false;
+      });
+
+      setupLights();
+
+      parkGroup = new THREE.Group();
+      parkGroup.name = 'Parque_Sustentavel_GREELING';
+
+      buildTerrainAndPaths();
+      buildSelfSustainingLake();
+      buildRainGardenAndPavilion();
+      buildCurvedSolarBenches();
+      buildPollinatorCorridorAndInsectHotel();
+      buildLowImpactSolarPoles();
+      buildAnimatedVisitors();
+      buildUndergroundXraySystems();
+      buildRainAndSprinklers();
+
+      scene.add(parkGroup);
+
+      createHotspotPins();
+      bindUIEvents();
+
+      setTimeout(() => {
+        const loader = document.getElementById('loader-screen');
+        loader.style.opacity = '0';
+        setTimeout(() => loader.remove(), 500);
+      }, 450);
+
+      animate();
+    }
+
+    function setupLights() {
+      hemiLight = new THREE.HemisphereLight('#f0fdf4', '#334155', 0.92);
+      hemiLight.position.set(0, 18, 0);
+      scene.add(hemiLight);
+
+      dirLight = new THREE.DirectionalLight('#fffbeb', 1.48);
+      dirLight.position.set(12, 18, 10);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 2048;
+      dirLight.shadow.mapSize.height = 2048;
+      dirLight.shadow.camera.near = 1;
+      dirLight.shadow.camera.far = 52;
+      const d = 18;
+      dirLight.shadow.camera.left = -d;
+      dirLight.shadow.camera.right = d;
+      dirLight.shadow.camera.top = d;
+      dirLight.shadow.camera.bottom = -d;
+      dirLight.shadow.bias = -0.0005;
+      scene.add(dirLight);
+    }
+
+    /**
+     * 1. TERRENO DO PARQUE, CINTURA ARBÓREA E PASSADIÇO CURVO DE MADEIRA COM LEDs
+     */
+    function buildTerrainAndPaths() {
+      const terrainGroup = new THREE.Group();
+      terrainGroup.name = 'Terreno_e_Passadico_Madeira';
+
+      // Relvado principal com material preparado para Raio-X
+      const grassMat = new THREE.MeshStandardMaterial({
+        color: '#2f6132',
+        roughness: 0.92,
+        transparent: true,
+        opacity: 1.0
+      });
+      xrayMaterials.push(grassMat);
+
+      const ground = new THREE.Mesh(new THREE.BoxGeometry(34, 0.25, 32), grassMat);
+      ground.position.set(0, -0.12, 0);
+      ground.receiveShadow = true;
+      ground.name = 'Relvado_Parque_Sustentavel';
+      terrainGroup.add(ground);
+
+      // Passadiço Curvo em Madeira Tratada ao longo da margem do lago (com LEDs embutidos)
+      const woodTex = createWoodTexture('#946036');
+      const deckWoodMat = new THREE.MeshStandardMaterial({
+        map: woodTex,
+        roughness: 0.65
+      });
+
+      const ledEdgeMat = new THREE.MeshStandardMaterial({
+        color: '#fef3c7',
+        emissive: '#fbbf24',
+        emissiveIntensity: 0.1
+      });
+      boardwalkLedMats.push(ledEdgeMat);
+
+      // Curva orgânica do passadiço de norte a sul junto ao lago
+      const boardwalkCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-1.4, 0.08, -12.0),
+        new THREE.Vector3(-0.9, 0.08, -6.5),
+        new THREE.Vector3(-0.3, 0.08, -1.0),
+        new THREE.Vector3(0.4, 0.08, 4.2),
+        new THREE.Vector3(3.8, 0.08, 8.6),
+        new THREE.Vector3(9.5, 0.08, 10.2)
+      ]);
+
+      const plankCount = 95;
+      for (let i = 0; i <= plankCount; i++) {
+        const t = i / plankCount;
+        const pt = boardwalkCurve.getPointAt(t);
+        const tangent = boardwalkCurve.getTangentAt(t);
+        const angle = Math.atan2(tangent.x, tangent.z);
+
+        const plank = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.08, 0.24), deckWoodMat);
+        plank.position.copy(pt);
+        plank.rotation.y = angle;
+        plank.receiveShadow = true;
+        plank.castShadow = true;
+        if (i % 5 === 0) plank.name = `Tabua_Passadico_${i}`;
+        terrainGroup.add(plank);
+
+        // Faixas LED embutidas nas extremidades das tábuas (fiel à pág. 26)
+        [-0.90, 0.90].forEach(sideOffset => {
+          const led = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.015, 0.22), ledEdgeMat);
+          led.position.set(
+            pt.x + Math.cos(angle) * sideOffset,
+            pt.y + 0.044,
+            pt.z - Math.sin(angle) * sideOffset
+          );
+          led.rotation.y = angle;
+          terrainGroup.add(led);
+        });
+      }
+
+      // Árvores e arbustos ornamentais periféricos para moldura paisagística
+      const trunkMat = new THREE.MeshStandardMaterial({ color: '#5c3a21', roughness: 0.9 });
+      const canopyColors = ['#1b4332', '#2d6a4f', '#40916c', '#386641'];
+      const canopyMats = canopyColors.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 }));
+
+      const treeCoords = [
+        [-13.5, -11.5], [-14.0, -4.0], [-13.5, 4.5], [-12.0, 11.5],
+        [-5.0, 12.5], [12.8, -11.0], [13.8, -3.5], [13.5, 5.5], [12.5, 12.0], [3.5, -12.8]
+      ];
+
+      treeCoords.forEach((tc, idx) => {
+        const tree = new THREE.Group();
+        tree.position.set(tc[0], 0, tc[1]);
+        const h = 2.4 + (idx % 3) * 0.6;
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, h, 8), trunkMat);
+        trunk.position.y = h / 2;
+        trunk.castShadow = true;
+
+        const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(1.45 + (idx % 2) * 0.35, 1), canopyMats[idx % canopyMats.length]);
+        crown.position.y = h + 0.8;
+        crown.castShadow = true;
+
+        tree.add(trunk, crown);
+        terrainGroup.add(tree);
+      });
+
+      parkGroup.add(terrainGroup);
+    }
+
+    /**
+     * 2. LAGO ARTIFICIAL AUTOSSUSTENTÁVEL (Fito-depuração, Nenúfares, Flutuadores Solares)
+     */
+    function buildSelfSustainingLake() {
+      const lakeGroup = new THREE.Group();
+      lakeGroup.name = 'Lago_Artificial_Autossustentavel';
+
+      // Leito mineral do lago
+      const bedMat = new THREE.MeshStandardMaterial({ color: '#1a3636', roughness: 0.95 });
+      const bed = new THREE.Mesh(new THREE.CylinderGeometry(5.6, 4.8, 0.12, 32), bedMat);
+      bed.position.set(6.2, -0.02, -0.5);
+      bed.scale.set(1.05, 1, 1.48);
+      lakeGroup.add(bed);
+
+      // Superfície de água translúcida com vértices animáveis (ondulação suave)
+      lakeWaterGeo = new THREE.PlaneGeometry(11.4, 16.2, 36, 48);
+      lakeWaterGeo.rotateX(-Math.PI / 2);
+      lakeBasePositions = Float32Array.from(lakeWaterGeo.attributes.position.array);
+
+      const waterMat = new THREE.MeshPhysicalMaterial({
+        color: '#0e7490',
+        emissive: '#083344',
+        emissiveIntensity: 0.22,
+        transparent: true,
+        opacity: 0.78,
+        roughness: 0.12,
+        metalness: 0.15
+      });
+      xrayMaterials.push(waterMat);
+
+      lakeWaterMesh = new THREE.Mesh(lakeWaterGeo, waterMat);
+      lakeWaterMesh.position.set(6.2, 0.05, -0.5);
+      lakeWaterMesh.name = 'Superficie_Agua_Lago_FitoDepuracao';
+      lakeGroup.add(lakeWaterMesh);
+
+      // Margem em pedras de rio e seixos ao redor do lago
+      const stoneMat = new THREE.MeshStandardMaterial({ color: '#64748b', roughness: 0.85 });
+      const stoneGeo = new THREE.DodecahedronGeometry(0.24, 0);
+      for (let s = 0; s < 68; s++) {
+        const ang = (s / 68) * Math.PI * 2;
+        const rx = 6.2 + Math.cos(ang) * 5.65;
+        const rz = -0.5 + Math.sin(ang) * 8.05;
+        // Evita sobrepor o passadiço na margem oeste
+        if (rx < 1.2 && rz > -7 && rz < 6) continue;
+
+        const stone = new THREE.Mesh(stoneGeo, stoneMat);
+        stone.position.set(rx, 0.08, rz);
+        stone.scale.set(1.1 + (s % 3) * 0.3, 0.55, 0.9 + (s % 2) * 0.3);
+        stone.rotation.y = s * 0.7;
+        stone.receiveShadow = true;
+        lakeGroup.add(stone);
+      }
+
+      // Plantas Aquáticas de Fito-depuração: Juncos, Tabúas e Nenúfares
+      const reedMat = new THREE.MeshStandardMaterial({ color: '#3f6212', roughness: 0.75 });
+      const cattailMat = new THREE.MeshStandardMaterial({ color: '#5c3a21', roughness: 0.9 });
+      const lilyPadMat = new THREE.MeshStandardMaterial({ color: '#15803d', roughness: 0.65 });
+      const lotusMat = new THREE.MeshStandardMaterial({ color: '#f472b6', emissive: '#db2777', emissiveIntensity: 0.15 });
+
+      const reedClusters = [
+        [2.5, -5.5], [9.2, -6.0], [10.4, -1.2], [9.8, 4.5], [4.2, 5.8], [2.2, 2.5]
+      ];
+      reedClusters.forEach(rc => {
+        for (let r = 0; r < 14; r++) {
+          const h = 0.75 + Math.random() * 0.65;
+          const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.025, h, 6), reedMat);
+          const ox = rc[0] + (Math.random() - 0.5) * 0.95;
+          const oz = rc[1] + (Math.random() - 0.5) * 0.95;
+          stalk.position.set(ox, h / 2, oz);
+          stalk.rotation.z = (Math.random() - 0.5) * 0.18;
+          lakeGroup.add(stalk);
+
+          if (r % 4 === 0) {
+            const head = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.16, 8), cattailMat);
+            head.position.set(ox, h - 0.12, oz);
+            lakeGroup.add(head);
+          }
+        }
+      });
+
+      // Nenúfares flutuantes com flores de lótus
+      const lilyCoords = [
+        [4.2, -3.8], [4.6, -3.4], [8.1, -2.5], [7.8, 2.4], [8.4, 2.8], [5.4, 3.8]
+      ];
+      lilyCoords.forEach((lc, idx) => {
+        const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.015, 16), lilyPadMat);
+        pad.position.set(lc[0], 0.065, lc[1]);
+        lakeGroup.add(pad);
+
+        if (idx % 2 === 0) {
+          const flower = new THREE.Mesh(new THREE.DodecahedronGeometry(0.08, 0), lotusMat);
+          flower.position.set(lc[0], 0.11, lc[1]);
+          lakeGroup.add(flower);
+        }
+      });
+
+      // 2 Unidades Flutuantes Solares de Fito-depuração e Arejamento (Página 26)
+      const solarTex = createSolarTexture();
+      const floatBaseMat = new THREE.MeshStandardMaterial({ color: '#1e293b', roughness: 0.4, metalness: 0.7 });
+      const solarPanelMat = new THREE.MeshStandardMaterial({ map: solarTex, roughness: 0.2, metalness: 0.6 });
+
+      [
+        { x: 5.5, z: -2.4 },
+        { x: 7.4, z: 1.8 }
+      ].forEach((fp, idx) => {
+        const unit = new THREE.Group();
+        unit.position.set(fp.x, 0.08, fp.z);
+        unit.name = `Unidade_Flutuante_Solar_Lago_${idx + 1}`;
+
+        const pontoon = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.10, 0.85), floatBaseMat);
+        unit.add(pontoon);
+
+        const pv = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.03, 0.74), solarPanelMat);
+        pv.position.set(0, 0.12, 0);
+        pv.rotation.x = 0.22;
+        unit.add(pv);
+
+        const ledMat = new THREE.MeshStandardMaterial({
+          color: '#34d399',
+          emissive: '#10b981',
+          emissiveIntensity: 0.4
+        });
+        const ledRing = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.015, 8, 24), ledMat);
+        ledRing.rotation.x = Math.PI / 2;
+        ledRing.position.y = 0.02;
+        unit.add(ledRing);
+
+        // Anel de espuma/ondulação de arejamento
+        const rippleMat = new THREE.MeshBasicMaterial({
+          color: '#bae6fd',
+          transparent: true,
+          opacity: 0.45,
+          side: THREE.DoubleSide
+        });
+        const ripple = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.68, 28), rippleMat);
+        ripple.rotation.x = -Math.PI / 2;
+        ripple.position.y = -0.01;
+        unit.add(ripple);
+
+        lakeGroup.add(unit);
+        floatingAerators.push({ group: unit, baseY: 0.08, phase: idx * 2.1, ledMat, ripple, rippleMat });
+      });
+
+      // Totem Informativo do Lago Autossustentável (Página 26)
+      const lakeTotem = buildEcoInfoTotem(
+        'LAGO AUTOSSUSTENTÁVEL',
+        'FITO-DEPURAÇÃO & REGA',
+        'ODS 6 & 11 • ÁGUA DA CHUVA',
+        '#38bdf8'
+      );
+      lakeTotem.position.set(1.15, 0.05, 4.6);
+      lakeTotem.rotation.y = -0.65;
+      lakeTotem.name = 'Totem_Lago_Autossustentavel';
+      lakeGroup.add(lakeTotem);
+
+      parkGroup.add(lakeGroup);
+    }
+
+    /**
+     * 3. JARDIM DE CHUVA, PONTE DE MADEIRA & PAVILHÃO COM COBERTURA VERDE (Página 26)
+     */
+    function buildRainGardenAndPavilion() {
+      const rgGroup = new THREE.Group();
+      rgGroup.name = 'Jardim_de_Chuva_e_Pavilhao';
+
+      const woodTex = createWoodTexture('#8a572e');
+      const woodMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.65 });
+      const anthraciteMat = new THREE.MeshStandardMaterial({ color: '#1e242b', roughness: 0.4, metalness: 0.72 });
+      const glassMat = new THREE.MeshPhysicalMaterial({
+        color: '#e0f2fe',
+        transparent: true,
+        opacity: 0.36,
+        roughness: 0.08,
+        side: THREE.DoubleSide
+      });
+
+      // Depressão longitudinal do Jardim de Chuva (x = -7.6 .. -3.8, z = -7.5 .. 7.5)
+      const basinSoilMat = new THREE.MeshStandardMaterial({ color: '#3b2f2f', roughness: 0.95 });
+      const basinSoil = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.08, 14.5), basinSoilMat);
+      basinSoil.position.set(-5.7, -0.03, 0);
+      basinSoil.receiveShadow = true;
+      basinSoil.name = 'Solo_Poroso_Jardim_Chuva';
+      rgGroup.add(basinSoil);
+
+      // Fluxo visível de água pluvial durante a simulação de chuva
+      rainStreamMat = new THREE.MeshStandardMaterial({
+        color: '#0ea5e9',
+        emissive: '#0284c7',
+        emissiveIntensity: 0.35,
+        transparent: true,
+        opacity: 0.0
+      });
+      const rainStream = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.04, 13.8), rainStreamMat);
+      rainStream.position.set(-5.7, 0.02, 0);
+      rgGroup.add(rainStream);
+
+      // Leito de seixos e pedras de rio ao longo do canal de drenagem
+      const pebbleMat = new THREE.MeshStandardMaterial({ color: '#78716c', roughness: 0.85 });
+      const pebbleGeo = new THREE.DodecahedronGeometry(0.18, 0);
+      for (let p = 0; p < 110; p++) {
+        const px = -7.3 + Math.random() * 3.2;
+        const pz = -7.0 + Math.random() * 14.0;
+        const pebble = new THREE.Mesh(pebbleGeo, pebbleMat);
+        pebble.position.set(px, 0.03, pz);
+        pebble.scale.set(1.1, 0.5, 0.9);
+        pebble.rotation.y = Math.random() * 3;
+        rgGroup.add(pebble);
+      }
+
+      // Flora nativa higrófila e flores coloridas no Jardim de Chuva
+      const plantColors = ['#15803d', '#16a34a', '#4d7c0f', '#22c55e'];
+      const flowerColors = ['#ef4444', '#a855f7', '#facc15', '#38bdf8'];
+      const plantMats = plantColors.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 }));
+      const flwMats = flowerColors.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 }));
+
+      const tuftGeo = new THREE.DodecahedronGeometry(0.24, 1);
+      const flwGeo = new THREE.SphereGeometry(0.055, 8, 8);
+
+      for (let f = 0; f < 95; f++) {
+        const fx = -7.35 + Math.random() * 3.3;
+        const fz = -6.8 + Math.random() * 13.6;
+        // Deixa espaço livre sob a ponte em z = 1.5
+        if (fz > 0.6 && fz < 2.4) continue;
+
+        const tuft = new THREE.Mesh(tuftGeo, plantMats[f % plantMats.length]);
+        const sc = 0.7 + Math.random() * 0.75;
+        tuft.scale.set(sc, sc * 0.95, sc);
+        tuft.position.set(fx, 0.12, fz);
+        tuft.castShadow = true;
+        rgGroup.add(tuft);
+
+        if (f % 2 === 0) {
+          const flw = new THREE.Mesh(flwGeo, flwMats[f % flwMats.length]);
+          flw.position.set(fx, 0.28 * sc + 0.08, fz);
+          rgGroup.add(flw);
+        }
+      }
+
+      // Ponte Pedonal de Madeira a atravessar o Jardim de Chuva (z = 1.5)
+      const bridgeGroup = new THREE.Group();
+      bridgeGroup.position.set(-5.7, 0.16, 1.5);
+      bridgeGroup.name = 'Ponte_Pedonal_Madeira';
+
+      const bridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.12, 1.65), woodMat);
+      bridgeDeck.castShadow = true;
+      bridgeDeck.receiveShadow = true;
+      bridgeGroup.add(bridgeDeck);
+
+      // Guardas laterais baixas em madeira e antracite
+      [-0.76, 0.76].forEach(bz => {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(4.3, 0.06, 0.06), woodMat);
+        rail.position.set(0, 0.42, bz);
+        bridgeGroup.add(rail);
+
+        [-1.9, 0, 1.9].forEach(bx => {
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.42, 0.07), anthraciteMat);
+          post.position.set(bx, 0.21, bz);
+          bridgeGroup.add(post);
+        });
+      });
+      rgGroup.add(bridgeGroup);
+
+      // Pavilhão Moderno de Vidro e Madeira com Cobertura Verde Inclinada (Página 26)
+      const pavGroup = new THREE.Group();
+      pavGroup.position.set(-10.2, 0.0, -3.2);
+      pavGroup.name = 'Pavilhao_Cobertura_Verde_Inclinada';
+
+      // Plataforma base
+      const pavBase = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.16, 5.4), anthraciteMat);
+      pavBase.position.set(0, 0.08, 0);
+      pavBase.receiveShadow = true;
+      pavGroup.add(pavBase);
+
+      // Paredes de vidro e montantes verticais em madeira
+      const glassWall = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.35, 4.8), glassMat);
+      glassWall.position.set(0, 1.32, 0);
+      pavGroup.add(glassWall);
+
+      for (let m = -2.3; m <= 2.3; m += 1.15) {
+        const mullionE = new THREE.Mesh(new THREE.BoxGeometry(0.10, 2.38, 0.10), woodMat);
+        mullionE.position.set(1.62, 1.32, m);
+        const mullionW = mullionE.clone();
+        mullionW.position.set(-1.62, 1.32, m);
+        pavGroup.add(mullionE, mullionW);
+      }
+
+      // Cobertura Verde Inclinada (inclina-se para Este em direção ao Jardim de Chuva)
+      const roofGroup = new THREE.Group();
+      roofGroup.position.set(0.2, 2.65, 0);
+      roofGroup.rotation.z = -0.14; // Desce na direção +X (Jardim de Chuva)
+
+      const roofSlab = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.18, 6.0), anthraciteMat);
+      roofSlab.castShadow = true;
+      roofGroup.add(roofSlab);
+
+      // Camada vegetal exuberante sobre a cobertura
+      const greenRoofMat = new THREE.MeshStandardMaterial({ color: '#3f6212', roughness: 0.9 });
+      const greenRoofLayer = new THREE.Mesh(new THREE.BoxGeometry(4.3, 0.14, 5.7), greenRoofMat);
+      greenRoofLayer.position.set(0, 0.14, 0);
+      roofGroup.add(greenRoofLayer);
+
+      for (let g = 0; g < 45; g++) {
+        const gx = -1.9 + Math.random() * 3.8;
+        const gz = -2.6 + Math.random() * 5.2;
+        const shrub = new THREE.Mesh(tuftGeo, plantMats[g % plantMats.length]);
+        shrub.scale.set(0.75, 0.45, 0.75);
+        shrub.position.set(gx, 0.24, gz);
+        roofGroup.add(shrub);
+      }
+      pavGroup.add(roofGroup);
+
+      // Caleira e Tubo de Escoamento Pluvial da Cobertura Verde para o Jardim de Chuva
+      const gutter = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.10, 5.9), anthraciteMat);
+      gutter.position.set(2.42, 2.32, 0);
+      pavGroup.add(gutter);
+
+      const downspout = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 2.15, 10), anthraciteMat);
+      downspout.position.set(2.42, 1.25, 2.6);
+      pavGroup.add(downspout);
+
+      // Cascata de água visível a sair do tubo durante a chuva
+      roofRunoffMat = new THREE.MeshStandardMaterial({
+        color: '#38bdf8',
+        emissive: '#0284c7',
+        emissiveIntensity: 0.6,
+        transparent: true,
+        opacity: 0.0
+      });
+      const runoffStream = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.08, 0.35, 10), roofRunoffMat);
+      runoffStream.position.set(2.52, 0.16, 2.6);
+      runoffStream.rotation.z = -0.35;
+      pavGroup.add(runoffStream);
+
+      rgGroup.add(pavGroup);
+
+      // Totem Solar do Jardim de Chuva (Página 26)
+      const rgTotem = buildEcoInfoTotem(
+        'JARDIM DE CHUVA',
+        'DRENAGEM NATURAL',
+        'ODS 11 & 15 • SOLO POROSO',
+        '#34d399'
+      );
+      rgTotem.position.set(-3.4, 0.05, 3.1);
+      rgTotem.rotation.y = 0.45;
+      rgTotem.name = 'Totem_Jardim_de_Chuva';
+      rgGroup.add(rgTotem);
+
+      parkGroup.add(rgGroup);
+    }
+
+    /**
+     * 4. BANCOS SOLARES CURVOS COM CARREGAMENTO INDUTIVO (Página 27)
+     */
+    function buildCurvedSolarBenches() {
+      const benchesGroup = new THREE.Group();
+      benchesGroup.name = 'Bancos_Solares_Carregamento_Indutivo';
+
+      const woodTex = createWoodTexture('#9c6334');
+      const solarTex = createSolarTexture();
+
+      const woodMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.6 });
+      const anthraciteMat = new THREE.MeshStandardMaterial({ color: '#1e242b', roughness: 0.38, metalness: 0.75 });
+      const creamInnerMat = new THREE.MeshStandardMaterial({ color: '#e7e5e4', roughness: 0.75 });
+      const solarMat = new THREE.MeshStandardMaterial({ map: solarTex, roughness: 0.2, metalness: 0.65 });
+
+      function createSingleCurvedSolarBench(withPhone = true) {
+        const benchUnit = new THREE.Group();
+
+        // Deck de madeira elevado de suporte
+        const deck = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.12, 2.4), woodMat);
+        deck.position.set(0, 0.06, 0);
+        deck.receiveShadow = true;
+        deck.castShadow = true;
+        benchUnit.add(deck);
+
+        // Assento ergonómico em ripas de madeira tratada
+        for (let s = 0; s < 5; s++) {
+          const plank = new THREE.Mesh(new THREE.BoxGeometry(2.55, 0.045, 0.11), woodMat);
+          plank.position.set(0, 0.52, -0.15 + s * 0.125);
+          plank.castShadow = true;
+          benchUnit.add(plank);
+        }
+
+        // 3 Nervuras arquitetónicas curvas em C (fiel ao render da página 27)
+        const arcRadius = 1.15;
+        [-1.22, 0, 1.22].forEach(rx => {
+          const rib = new THREE.Mesh(
+            new THREE.TorusGeometry(arcRadius, 0.065, 10, 28, Math.PI * 1.12),
+            anthraciteMat
+          );
+          rib.rotation.y = Math.PI / 2;
+          rib.rotation.z = Math.PI * 0.44;
+          rib.position.set(rx, 1.35, 0.05);
+          rib.castShadow = true;
+          benchUnit.add(rib);
+        });
+
+        // Cobertura curva envolvente (exterior antracite + forro acústico interior claro)
+        const shellOuter = new THREE.Mesh(
+          new THREE.CylinderGeometry(1.18, 1.18, 2.52, 28, 1, true, Math.PI * 0.94, Math.PI * 1.12),
+          anthraciteMat
+        );
+        shellOuter.rotation.z = Math.PI / 2;
+        shellOuter.position.set(0, 1.35, 0.05);
+        shellOuter.castShadow = true;
+        benchUnit.add(shellOuter);
+
+        const shellInner = new THREE.Mesh(
+          new THREE.CylinderGeometry(1.12, 1.12, 2.48, 28, 1, true, Math.PI * 0.94, Math.PI * 1.12),
+          creamInnerMat
+        );
+        shellInner.rotation.z = Math.PI / 2;
+        shellInner.material.side = THREE.BackSide;
+        shellInner.position.set(0, 1.35, 0.05);
+        benchUnit.add(shellInner);
+
+        // Painéis solares discretos integrados no topo da cobertura curva
+        [-0.65, 0.65].forEach(px => {
+          const pv = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.03, 0.85), solarMat);
+          pv.position.set(px, 2.54, 0.12);
+          pv.rotation.x = 0.08;
+          pv.castShadow = true;
+          benchUnit.add(pv);
+        });
+
+        // Bases de carregamento sem fios por indução (Qi) + Telemóvel 3D a carregar
+        const padLedMat = new THREE.MeshStandardMaterial({
+          color: '#10b981',
+          emissive: '#10b981',
+          emissiveIntensity: 1.5
+        });
+
+        [-0.95, 0.95].forEach((ix, idx) => {
+          const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.01, 20), anthraciteMat);
+          pad.position.set(ix, 0.548, 0.12);
+          benchUnit.add(pad);
+
+          const ring = new THREE.Mesh(new THREE.RingGeometry(0.052, 0.066, 24), padLedMat);
+          ring.rotation.x = -Math.PI / 2;
+          ring.position.set(ix, 0.555, 0.12);
+          benchUnit.add(ring);
+
+          // Telemóvel 3D pousado na base de indução direita
+          if (withPhone && idx === 1) {
+            const phone = new THREE.Mesh(
+              new THREE.BoxGeometry(0.075, 0.009, 0.145),
+              new THREE.MeshStandardMaterial({ color: '#0f172a', roughness: 0.2, metalness: 0.8 })
+            );
+            phone.position.set(ix, 0.56, 0.12);
+            phone.rotation.y = 0.25;
+            const phoneScreen = new THREE.Mesh(
+              new THREE.PlaneGeometry(0.066, 0.132),
+              new THREE.MeshBasicMaterial({ color: '#34d399' })
+            );
+            phoneScreen.rotation.x = -Math.PI / 2;
+            phoneScreen.rotation.z = 0.25;
+            phoneScreen.position.set(ix, 0.566, 0.12);
+            benchUnit.add(phone, phoneScreen);
+          }
+        });
+
+        // Iluminação LED indireta quente integrada no arco
+        const warmLedMat = new THREE.MeshStandardMaterial({
+          color: '#fef3c7',
+          emissive: '#fbbf24',
+          emissiveIntensity: 0.15
+        });
+        const arcLed = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.025, 0.03), warmLedMat);
+        arcLed.position.set(0, 2.38, 0.35);
+        benchUnit.add(arcLed);
+
+        const pointLight = new THREE.PointLight('#fde68a', 0.0, 4.2, 1.6);
+        pointLight.position.set(0, 2.15, 0.25);
+        benchUnit.add(pointLight);
+
+        benchLights.push({ mat: warmLedMat, light: pointLight });
+        return benchUnit;
+      }
+
+      // Banco Solar 1: Margem Oeste com vista panorâmica para o lago
+      const bench1 = createSingleCurvedSolarBench(true);
+      bench1.position.set(-1.6, 0.0, -4.3);
+      bench1.rotation.y = Math.PI * 0.44;
+      bench1.name = 'Banco_Solar_Inteligente_1';
+      benchesGroup.add(bench1);
+
+      // Banco Solar 2: Margem Sul com vista para o lago e passadiço
+      const bench2 = createSingleCurvedSolarBench(false);
+      bench2.position.set(1.2, 0.0, 6.8);
+      bench2.rotation.y = Math.PI * 0.72;
+      bench2.name = 'Banco_Solar_Inteligente_2';
+      benchesGroup.add(bench2);
+
+      parkGroup.add(benchesGroup);
+    }
+
+    /**
+     * 5. CORREDOR DE POLINIZADORES, HOTEL DE INSETOS & ABRIGO FAUNA (ODS 15.1 — Página 28)
+     */
+    function buildPollinatorCorridorAndInsectHotel() {
+      const ecoGroup = new THREE.Group();
+      ecoGroup.position.set(-3.8, 0.0, -8.8);
+      ecoGroup.name = 'Corredor_Polinizadores_e_Hotel_Insetos';
+
+      const woodTex = createWoodTexture('#b07d4f');
+      const woodMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.65 });
+      const darkWoodMat = new THREE.MeshStandardMaterial({ color: '#5c3a21', roughness: 0.8 });
+      const anthraciteMat = new THREE.MeshStandardMaterial({ color: '#1e242b', roughness: 0.4, metalness: 0.7 });
+      const solarTex = createSolarTexture();
+      const solarMat = new THREE.MeshStandardMaterial({ map: solarTex, roughness: 0.2, metalness: 0.65 });
+
+      // Canteiro elevado de flora nativa melífera (Equináceas, Rudbéquias, Alfazema)
+      const flowerBed = new THREE.Mesh(
+        new THREE.CylinderGeometry(2.6, 2.8, 0.14, 24),
+        new THREE.MeshStandardMaterial({ color: '#3b2f2f', roughness: 0.95 })
+      );
+      flowerBed.position.set(0, 0.07, 0);
+      flowerBed.receiveShadow = true;
+      ecoGroup.add(flowerBed);
+
+      const stemMat = new THREE.MeshStandardMaterial({ color: '#3f6212', roughness: 0.8 });
+      const coneflowerPetalMat = new THREE.MeshStandardMaterial({ color: '#d946ef', roughness: 0.6 });
+      const coneflowerCoreMat = new THREE.MeshStandardMaterial({ color: '#78350f', roughness: 0.9 });
+      const rudbeckiaPetalMat = new THREE.MeshStandardMaterial({ color: '#facc15', roughness: 0.6 });
+      const lavenderMat = new THREE.MeshStandardMaterial({ color: '#8b5cf6', roughness: 0.7 });
+
+      // Gera 65 flores detalhadas (Equináceas roxas, Rudbéquias amarelas e Alfazema)
+      for (let i = 0; i < 65; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const rad = 0.55 + Math.random() * 1.95;
+        const fx = Math.cos(ang) * rad;
+        const fz = Math.sin(ang) * rad;
+        // Mantém frente do hotel de insetos desimpedida
+        if (fx > -0.6 && fx < 0.8 && fz > 0.2 && fz < 1.5) continue;
+
+        const h = 0.35 + Math.random() * 0.45;
+        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.014, h, 6), stemMat);
+        stem.position.set(fx, 0.12 + h / 2, fz);
+        ecoGroup.add(stem);
+
+        const type = i % 3;
+        if (type === 0) {
+          // Equinácea roxa
+          const petals = new THREE.Mesh(new THREE.ConeGeometry(0.085, 0.05, 10), coneflowerPetalMat);
+          petals.rotation.x = Math.PI;
+          petals.position.set(fx, 0.12 + h, fz);
+          const core = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 8), coneflowerCoreMat);
+          core.position.set(fx, 0.14 + h, fz);
+          ecoGroup.add(petals, core);
+        } else if (type === 1) {
+          // Rudbéquia amarela
+          const petals = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.015, 12), rudbeckiaPetalMat);
+          petals.position.set(fx, 0.12 + h, fz);
+          const core = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), coneflowerCoreMat);
+          core.position.set(fx, 0.135 + h, fz);
+          ecoGroup.add(petals, core);
+        } else {
+          // Espiga de alfazema
+          const spike = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.035, 0.16, 8), lavenderMat);
+          spike.position.set(fx, 0.14 + h, fz);
+          ecoGroup.add(spike);
+        }
+      }
+
+      // === HOTEL DE INSETOS SOLAR EM MADEIRA (Fiel à página 28 direita) ===
+      const hotel = new THREE.Group();
+      hotel.position.set(-0.25, 0.14, -0.35);
+      hotel.rotation.y = 0.35;
+      hotel.name = 'Hotel_de_Insetos_Solar';
+
+      // Base e caixa principal compartimentada
+      const hotelBack = new THREE.Mesh(new THREE.BoxGeometry(0.95, 1.15, 0.28), woodMat);
+      hotelBack.position.set(0, 0.68, 0);
+      hotelBack.castShadow = true;
+      hotel.add(hotelBack);
+
+      // Divisórias internas em madeira
+      const vDiv = new THREE.Mesh(new THREE.BoxGeometry(0.03, 1.08, 0.29), darkWoodMat);
+      vDiv.position.set(0, 0.68, 0.01);
+      const hDiv1 = new THREE.Mesh(new THREE.BoxGeometry(0.90, 0.03, 0.29), darkWoodMat);
+      hDiv1.position.set(0, 0.45, 0.01);
+      const hDiv2 = hDiv1.clone();
+      hDiv2.position.set(0, 0.85, 0.01);
+      hotel.add(vDiv, hDiv1, hDiv2);
+
+      // Enchimento ecológico dos compartimentos:
+      // 1) Troncos perfurados (superior esquerdo)
+      for (let t = 0; t < 7; t++) {
+        const log = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.26, 10), woodMat);
+        log.rotation.x = Math.PI / 2;
+        log.position.set(-0.34 + (t % 3) * 0.12, 0.96 + Math.floor(t / 3) * 0.11, 0.03);
+        hotel.add(log);
+      }
+
+      // 2) Canas de bambu ocas (superior direito)
+      const bambooMat = new THREE.MeshStandardMaterial({ color: '#d4a373', roughness: 0.5 });
+      for (let b = 0; b < 18; b++) {
+        const cane = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.26, 8), bambooMat);
+        cane.rotation.x = Math.PI / 2;
+        cane.position.set(0.08 + (b % 6) * 0.06, 0.92 + Math.floor(b / 6) * 0.08, 0.03);
+        hotel.add(cane);
+      }
+
+      // 3) Pinhas e vasos de terracota (compartimentos inferiores)
+      const terracottaMat = new THREE.MeshStandardMaterial({ color: '#c2410c', roughness: 0.7 });
+      const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.055, 0.22, 12), terracottaMat);
+      pot.rotation.x = Math.PI / 2;
+      pot.position.set(0.24, 0.28, 0.04);
+      hotel.add(pot);
+
+      for (let c = 0; c < 6; c++) {
+        const cone = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.12, 8), darkWoodMat);
+        cone.rotation.x = Math.PI / 2;
+        cone.position.set(-0.34 + (c % 3) * 0.12, 0.56 + Math.floor(c / 3) * 0.12, 0.04);
+        hotel.add(cone);
+      }
+
+      // Telhado de duas águas em madeira
+      const roofL = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.05, 0.38), woodMat);
+      roofL.position.set(-0.26, 1.38, 0);
+      roofL.rotation.z = 0.48;
+      const roofR = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.05, 0.38), woodMat);
+      roofR.position.set(0.26, 1.38, 0);
+      roofR.rotation.z = -0.48;
+      hotel.add(roofL, roofR);
+
+      // Painel solar no topo do Hotel de Insetos (fiel à pág. 28)
+      const hotelSolar = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.035, 0.42), solarMat);
+      hotelSolar.position.set(0, 1.62, 0.04);
+      hotelSolar.rotation.x = 0.25;
+      hotelSolar.castShadow = true;
+      hotel.add(hotelSolar);
+
+      ecoGroup.add(hotel);
+
+      // === ABRIGO DE MADEIRA PARA OURIÇOS & FAUNA LOCAL (Ao lado do Hotel) ===
+      const hedgehogHouse = new THREE.Group();
+      hedgehogHouse.position.set(0.75, 0.14, -0.15);
+      hedgehogHouse.rotation.y = 0.2;
+      hedgehogHouse.name = 'Abrigo_Fauna_Local_Ouricos';
+
+      const hhBody = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.32, 0.42), woodMat);
+      hhBody.position.set(0, 0.16, 0);
+      hhBody.castShadow = true;
+      const hhRoofL = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.035, 0.48), woodMat);
+      hhRoofL.position.set(-0.13, 0.38, 0);
+      hhRoofL.rotation.z = 0.45;
+      const hhRoofR = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.035, 0.48), woodMat);
+      hhRoofR.position.set(0.13, 0.38, 0);
+      hhRoofR.rotation.z = -0.45;
+      const hhDoor = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.08, 0.08, 0.04, 12),
+        new THREE.MeshBasicMaterial({ color: '#090d11' })
+      );
+      hhDoor.rotation.x = Math.PI / 2;
+      hhDoor.position.set(0, 0.09, 0.20);
+
+      hedgehogHouse.add(hhBody, hhRoofL, hhRoofR, hhDoor);
+      ecoGroup.add(hedgehogHouse);
+
+      // === CAIXA-NINHO ELEVADA NUM POSTE ===
+      const birdPost = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.045, 1.95, 8), darkWoodMat);
+      birdPost.position.set(1.25, 0.97, -0.65);
+      const birdBox = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.32, 0.24), woodMat);
+      birdBox.position.set(1.25, 1.85, -0.58);
+      const birdHole = new THREE.Mesh(
+        new THREE.CircleGeometry(0.035, 12),
+        new THREE.MeshBasicMaterial({ color: '#090d11' })
+      );
+      birdHole.position.set(1.25, 1.90, -0.458);
+      ecoGroup.add(birdPost, birdBox, birdHole);
+
+      // === TOTEM INTERATIVO COM QR CODE (ECOSSISTEMA LOCAL & HOTÉIS DE INSETOS - ODS 15.1) ===
+      const qrTex = createQRSignTexture();
+      const qrTotem = new THREE.Group();
+      qrTotem.position.set(0.38, 0.14, 1.35);
+      qrTotem.rotation.y = 0.32;
+      qrTotem.name = 'Totem_QR_Code_ODS_15_1';
+
+      const qrPedestal = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.85, 0.12), anthraciteMat);
+      qrPedestal.position.set(0, 0.42, 0);
+      qrPedestal.rotation.x = -0.22;
+      qrPedestal.castShadow = true;
+
+      const qrFace = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.42, 0.68),
+        new THREE.MeshStandardMaterial({
+          map: qrTex,
+          emissiveMap: qrTex,
+          emissive: '#ffffff',
+          emissiveIntensity: 0.35
+        })
+      );
+      qrFace.position.set(0, 0.46, 0.062);
+      qrFace.rotation.x = -0.22;
+      qrFace.name = 'Placa_QR_Code_Interativa';
+
+      qrTotem.add(qrPedestal, qrFace);
+      ecoGroup.add(qrTotem);
+
+      // Placa Solar Corredor de Polinizadores (Página 28 esquerda)
+      const polyPlaque = buildEcoInfoTotem(
+        'CORREDOR DE POLINIZADORES',
+        'BIODIVERSIDADE URBANA',
+        'FLORA NATIVA • ODS 15',
+        '#a3e635'
+      );
+      polyPlaque.position.set(-1.35, 0.14, 1.15);
+      polyPlaque.rotation.y = 0.25;
+      ecoGroup.add(polyPlaque);
+
+      // === BORBOLETAS E ABELHAS 3D ANIMADAS SOBRE AS FLORES ===
+      const wingMat = new THREE.MeshStandardMaterial({
+        color: '#f97316',
+        emissive: '#ea580c',
+        emissiveIntensity: 0.2,
+        side: THREE.DoubleSide
+      });
+      const beeMat = new THREE.MeshStandardMaterial({ color: '#facc15', roughness: 0.4 });
+
+      for (let b = 0; b < 8; b++) {
+        const bGroup = new THREE.Group();
+        const wingL = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.12), wingMat);
+        wingL.position.x = -0.045;
+        const wingR = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.12), wingMat);
+        wingR.position.x = 0.045;
+        bGroup.add(wingL, wingR);
+
+        const cx = (Math.random() - 0.5) * 3.2;
+        const cz = (Math.random() - 0.5) * 3.2;
+        bGroup.position.set(cx, 0.85 + Math.random() * 0.5, cz);
+        ecoGroup.add(bGroup);
+
+        butterflies.push({
+          group: bGroup,
+          wingL,
+          wingR,
+          cx,
+          cz,
+          baseY: bGroup.position.y,
+          speed: 1.2 + Math.random() * 0.8,
+          phase: b * 1.1
+        });
+      }
+
+      for (let a = 0; a < 10; a++) {
+        const bee = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), beeMat);
+        const cx = (Math.random() - 0.5) * 3.4;
+        const cz = (Math.random() - 0.5) * 3.4;
+        bee.position.set(cx, 0.68, cz);
+        ecoGroup.add(bee);
+        bees.push({ mesh: bee, cx, cz, phase: a * 0.9 });
+      }
+
+      parkGroup.add(ecoGroup);
+    }
+
+    /**
+     * Auxiliar: Constrói pequenos totens informativos com mini painel solar (Págs. 26 & 28)
+     */
+    function buildEcoInfoTotem(line1, line2, badgeText, accentColor) {
+      const group = new THREE.Group();
+      const anthraciteMat = new THREE.MeshStandardMaterial({ color: '#1e242b', roughness: 0.4, metalness: 0.7 });
+      const solarTex = createSolarTexture();
+      const solarMat = new THREE.MeshStandardMaterial({ map: solarTex, roughness: 0.2, metalness: 0.65 });
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.92, 0.16), anthraciteMat);
+      body.position.set(0, 0.46, 0);
+      body.castShadow = true;
+      group.add(body);
+
+      const tex = createEcoPlaqueTexture(line1, line2, badgeText, accentColor);
+      const screen = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.48, 0.32),
+        new THREE.MeshStandardMaterial({
+          map: tex,
+          emissiveMap: tex,
+          emissive: '#ffffff',
+          emissiveIntensity: 0.35
+        })
+      );
+      screen.position.set(0, 0.64, 0.082);
+      group.add(screen);
+
+      // Mini painel solar lateral inclinado (como na pág. 26 e 28)
+      const miniPv = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.025, 0.24), solarMat);
+      miniPv.position.set(0.38, 0.35, 0.05);
+      miniPv.rotation.x = 0.45;
+      group.add(miniPv);
+
+      return group;
+    }
+
+    /**
+     * 6. POSTES SOLARES DE BAIXO IMPACTO COM SENSOR PIR (Página 27)
+     */
+    function buildLowImpactSolarPoles() {
+      const polesGroup = new THREE.Group();
+      polesGroup.name = 'Postes_Solares_Baixo_Impacto';
+
+      const anthraciteMat = new THREE.MeshStandardMaterial({ color: '#1e242b', roughness: 0.38, metalness: 0.78 });
+      const solarTex = createSolarTexture();
+      const solarMat = new THREE.MeshStandardMaterial({ map: solarTex, roughness: 0.2, metalness: 0.65 });
+
+      const poleLocations = [
+        { x: -2.2, z: -9.5, rot: 0.3 },
+        { x: -2.1, z: -2.2, rot: 0.1 },
+        { x: 0.8, z: 2.2, rot: -0.4 },
+        { x: 4.5, z: 7.4, rot: -0.9 },
+        { x: -8.2, z: 1.5, rot: 0.0 },
+        { x: 10.6, z: -4.5, rot: -1.6 }
+      ];
+
+      poleLocations.forEach((loc, idx) => {
+        const pole = new THREE.Group();
+        pole.position.set(loc.x, 0, loc.z);
+        pole.rotation.y = loc.rot;
+        pole.name = `Poste_Solar_Baixo_Impacto_${idx + 1}`;
+
+        const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, 3.2, 12), anthraciteMat);
+        mast.position.y = 1.6;
+        mast.castShadow = true;
+        pole.add(mast);
+
+        // Braço luminária direcionado estritamente para o solo (zero poluição luminosa)
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.06, 0.16), anthraciteMat);
+        arm.position.set(0.32, 3.16, 0);
+        arm.castShadow = true;
+        pole.add(arm);
+
+        // Painel solar inclinado no topo
+        const pv = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.035, 0.56), solarMat);
+        pv.position.set(-0.08, 3.34, 0);
+        pv.rotation.z = 0.28;
+        pv.castShadow = true;
+        pole.add(pv);
+
+        // Difusor LED inferior
+        const bulbMat = new THREE.MeshStandardMaterial({
+          color: '#fef3c7',
+          emissive: '#fde68a',
+          emissiveIntensity: 0.1
+        });
+        const bulb = new THREE.Mesh(new THREE.PlaneGeometry(0.45, 0.11), bulbMat);
+        bulb.rotation.x = Math.PI / 2;
+        bulb.position.set(0.42, 3.125, 0);
+        pole.add(bulb);
+
+        // SpotLight apontado exclusivamente para baixo
+        const spot = new THREE.SpotLight('#fef3c7', 0.0, 7.5, 0.62, 0.55, 1.4);
+        spot.position.set(0.42, 3.10, 0);
+        spot.target.position.set(0.42, 0.0, 0);
+        pole.add(spot, spot.target);
+
+        parksPosWorld = new THREE.Vector3(loc.x, 0, loc.z);
+        solarPoles.push({
+          group: pole,
+          worldPos: parksPosWorld,
+          bulbMat,
+          spot,
+          currentIntensity: 0
+        });
+
+        polesGroup.add(pole);
+      });
+
+      parkGroup.add(polesGroup);
+    }
+
+    /**
+     * 7. VISITANTES 3D ANIMADOS (Acionam os Sensores PIR dos Postes Solares)
+     */
+    function buildAnimatedVisitors() {
+      // Trajeto pedonal pela ponte do jardim de chuva e passadiço do lago
+      visitorCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-8.4, 0.16, 1.5),
+        new THREE.Vector3(-5.7, 0.22, 1.5),
+        new THREE.Vector3(-2.6, 0.14, 1.2),
+        new THREE.Vector3(-0.3, 0.12, -1.0),
+        new THREE.Vector3(-0.9, 0.12, -6.5),
+        new THREE.Vector3(-1.4, 0.12, -11.5)
+      ]);
+
+      const colors = ['#0284c7', '#059669'];
+      const skinMat = new THREE.MeshStandardMaterial({ color: '#e2a887', roughness: 0.6 });
+      const pantsMat = new THREE.MeshStandardMaterial({ color: '#1e293b', roughness: 0.8 });
+
+      for (let v = 0; v < 2; v++) {
+        const person = new THREE.Group();
+        const shirtMat = new THREE.MeshStandardMaterial({ color: colors[v], roughness: 0.65 });
+
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.52, 0.18), shirtMat);
+        torso.position.y = 1.08;
+        torso.castShadow = true;
+
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 14), skinMat);
+        head.position.y = 1.48;
+        head.castShadow = true;
+
+        const legL = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.76, 8), pantsMat);
+        legL.position.set(-0.08, 0.38, 0);
+        const legR = legL.clone();
+        legR.position.set(0.08, 0.38, 0);
+
+        person.add(torso, head, legL, legR);
+        scene.add(person);
+
+        visitors.push({
+          group: person,
+          legL,
+          legR,
+          t: v * 0.48,
+          dir: v === 0 ? 1 : -1,
+          speed: 0.042
+        });
+      }
+    }
+
+    /**
+     * 8. VISTA RAIO-X: INFRAESTRUTURA HÍDRICA SUBTERRÂNEA & BATERIAS LiFePO4
+     */
+    function buildUndergroundXraySystems() {
+      undergroundGroup = new THREE.Group();
+      undergroundGroup.name = 'Infraestrutura_Subterranea_RaioX';
+      undergroundGroup.visible = false;
+
+      const pipeMat = new THREE.MeshStandardMaterial({
+        color: '#0ea5e9',
+        emissive: '#0284c7',
+        emissiveIntensity: 0.55,
+        roughness: 0.3
+      });
+
+      // Tubagem subterrânea: Pavilhão -> Jardim de Chuva -> Lago Autossustentável -> Rega
+      const hydroCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-7.8, -0.15, -0.6),
+        new THREE.Vector3(-5.7, -0.35, 0.0),
+        new THREE.Vector3(-1.5, -0.45, -0.3),
+        new THREE.Vector3(3.5, -0.45, -0.5),
+        new THREE.Vector3(6.2, -0.45, -4.5),
+        new THREE.Vector3(-3.5, -0.35, -8.5)
+      ]);
+      const hydroPipe = new THREE.Mesh(new THREE.TubeGeometry(hydroCurve, 44, 0.11, 10, false), pipeMat);
+      hydroPipe.name = 'Tubagem_Recirculacao_Pluvial_Subterranea';
+      undergroundGroup.add(hydroPipe);
+
+      // Camada de brita/solo poroso filtrante sob o Jardim de Chuva
+      const gravelMat = new THREE.MeshStandardMaterial({
+        color: '#38bdf8',
+        transparent: true,
+        opacity: 0.35
+      });
+      const gravelBed = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.35, 14.2), gravelMat);
+      gravelBed.position.set(-5.7, -0.25, 0);
+      gravelBed.name = 'Camada_Filtracao_Porosa_Subsolo';
+      undergroundGroup.add(gravelBed);
+
+      // Cofres subterrâneos de baterias LiFePO4 dos Bancos Solares
+      const batMat = new THREE.MeshStandardMaterial({ color: '#10b981', emissive: '#059669', emissiveIntensity: 0.5 });
+      [
+        [-1.6, -4.3],
+        [1.2, 6.8]
+      ].forEach((bp, idx) => {
+        const vault = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.28, 0.65), batMat);
+        vault.position.set(bp[0], -0.25, bp[1]);
+        vault.name = `Bateria_Subterranea_Banco_Solar_${idx + 1}`;
+        undergroundGroup.add(vault);
+      });
+
+      parkGroup.add(undergroundGroup);
+    }
+
+    /**
+     * 9. CHUVA 3D E ASPERSORES AUTOMÁTICOS DE REGA ALIMENTADOS PELO LAGO
+     */
+    function buildRainAndSprinklers() {
+      const count = 1100;
+      const pos = new Float32Array(count * 6);
+      for (let i = 0; i < count; i++) {
+        const rx = (Math.random() - 0.5) * 30;
+        const ry = Math.random() * 11;
+        const rz = (Math.random() - 0.5) * 30;
+        pos[i * 6] = rx;
+        pos[i * 6 + 1] = ry;
+        pos[i * 6 + 2] = rz;
+        pos[i * 6 + 3] = rx;
+        pos[i * 6 + 4] = ry - 0.38;
+        pos[i * 6 + 5] = rz;
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      rainPoints = new THREE.LineSegments(
+        geo,
+        new THREE.LineBasicMaterial({ color: '#bae6fd', transparent: true, opacity: 0.55 })
+      );
+      rainPoints.visible = false;
+      scene.add(rainPoints);
+
+      // Aspersores de rega automática nos canteiros (ativados com o ciclo hídrico)
+      const sprayMat = new THREE.MeshBasicMaterial({
+        color: '#7dd3fc',
+        transparent: true,
+        opacity: 0.45,
+        side: THREE.DoubleSide
+      });
+
+      [
+        [-2.2, -7.2],
+        [-9.2, 6.5],
+        [10.2, 7.2]
+      ].forEach(sp => {
+        const cone = new THREE.Mesh(new THREE.ConeGeometry(1.15, 0.75, 20, 1, true), sprayMat);
+        cone.rotation.x = Math.PI;
+        cone.position.set(sp[0], 0.42, sp[1]);
+        cone.visible = false;
+        scene.add(cone);
+        sprinklers.push(cone);
+      });
+    }
+
+    /**
+     * ============================================================================
+     * HOTSPOTS 3D, CICLO DIA/CREPÚSCULO/NOITE E CONTROLO HUD
+     * ============================================================================
+     */
+    function createHotspotPins() {
+      const layer = document.getElementById('hotspots-layer');
+      layer.innerHTML = '';
+
+      HOTSPOTS_DATA.forEach(item => {
+        const pin = document.createElement('div');
+        pin.className = 'hotspot-pin pointer-events-auto';
+        pin.id = `pin-${item.id}`;
+        pin.innerHTML = `
+          <div class="hotspot-dot">${item.num}</div>
+          <div class="hotspot-label">${item.title}</div>
+        `;
+        pin.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectHotspot(item.id);
+        });
+        layer.appendChild(pin);
+      });
+    }
+
+    function updateHotspotPositions() {
+      const layer = document.getElementById('hotspots-layer');
+      layer.style.display = appState.showHotspots ? 'block' : 'none';
+      if (!appState.showHotspots) return;
+
+      const widthHalf = window.innerWidth / 2;
+      const heightHalf = window.innerHeight / 2;
+
+      HOTSPOTS_DATA.forEach(item => {
+        const pin = document.getElementById(`pin-${item.id}`);
+        if (!pin) return;
+
+        const proj = item.pos3D.clone().project(camera);
+        if (proj.z > 1) {
+          pin.style.opacity = '0';
+          pin.style.pointerEvents = 'none';
+        } else {
+          pin.style.left = `${proj.x * widthHalf + widthHalf}px`;
+          pin.style.top = `${-(proj.y * heightHalf) + heightHalf}px`;
+          pin.style.opacity = '1';
+          pin.style.pointerEvents = 'auto';
+        }
+      });
+    }
+
+    function selectHotspot(id) {
+      const data = HOTSPOTS_DATA.find(h => h.id === id);
+      if (!data) return;
+
+      appState.selectedHotspotId = id;
+      document.querySelectorAll('.hotspot-pin').forEach(p => p.classList.remove('active'));
+      const activePin = document.getElementById(`pin-${id}`);
+      if (activePin) activePin.classList.add('active');
+
+      if (data.camKey && CAMERA_PRESETS[data.camKey]) {
+        focusCamera(data.camKey);
+      }
+
+      document.getElementById('card-badge').textContent = data.badge;
+      document.getElementById('card-title').textContent = data.title;
+      document.getElementById('card-desc').textContent = data.desc;
+      document.getElementById('card-cost').textContent = data.cost;
+      document.getElementById('card-ods').textContent = data.ods;
+
+      const qrBanner = document.getElementById('card-qr-banner');
+      if (data.isQR) {
+        qrBanner.classList.remove('hidden');
+      } else {
+        qrBanner.classList.add('hidden');
+      }
+
+      document.getElementById('card-specs').innerHTML = data.specs.map(s => `
+        <div class="flex items-start gap-2 text-[11px] text-slate-200 bg-white/5 rounded-xl px-2.5 py-1.5 border border-white/5">
+          <span class="text-emerald-400 font-bold mt-0.5">✓</span>
+          <span>${s}</span>
+        </div>
+      `).join('');
+
+      document.getElementById('info-card').classList.remove('hidden');
+    }
+
+    function setTimeOfDay(mode) {
+      appState.timeOfDay = mode;
+
+      const btnDay = document.getElementById('btn-time-day');
+      const btnDusk = document.getElementById('btn-time-dusk');
+      const btnNight = document.getElementById('btn-time-night');
+
+      [btnDay, btnDusk, btnNight].forEach(b => {
+        b.className = 'time-btn py-1.5 px-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1 text-slate-400 hover:text-white transition cursor-pointer';
+      });
+
+      const statusEl = document.getElementById('hud-light-status');
+
+      if (mode === 'day') {
+        scene.background = new THREE.Color('#cce6dc');
+        scene.fog = new THREE.FogExp2('#cce6dc', 0.016);
+        hemiLight.intensity = 0.92;
+        hemiLight.color.set('#f0fdf4');
+        dirLight.intensity = 1.48;
+        dirLight.color.set('#fffbeb');
+        dirLight.position.set(12, 18, 10);
+
+        btnDay.className = 'time-btn py-1.5 px-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1 bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 transition cursor-pointer';
+        statusEl.textContent = 'DIA (Carga Solar)';
+        statusEl.className = 'font-bold text-amber-300';
+      } else if (mode === 'dusk') {
+        scene.background = new THREE.Color('#1e293b');
+        scene.fog = new THREE.FogExp2('#1e293b', 0.019);
+        hemiLight.intensity = 0.45;
+        hemiLight.color.set('#fda4af');
+        dirLight.intensity = 0.65;
+        dirLight.color.set('#fb923c');
+        dirLight.position.set(-14, 6, -8);
+
+        btnDusk.className = 'time-btn py-1.5 px-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1 bg-amber-500/25 text-amber-200 border border-amber-400/40 transition cursor-pointer';
+        statusEl.textContent = 'CREPÚSCULO (LEDs)';
+        statusEl.className = 'font-bold text-orange-300';
+      } else {
+        scene.background = new THREE.Color('#070d14');
+        scene.fog = new THREE.FogExp2('#070d14', 0.022);
+        hemiLight.intensity = 0.24;
+        hemiLight.color.set('#1e293b');
+        dirLight.intensity = 0.22;
+        dirLight.color.set('#93c5fd');
+
+        btnNight.className = 'time-btn py-1.5 px-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1 bg-indigo-500/30 text-indigo-200 border border-indigo-400/40 transition cursor-pointer';
+        statusEl.textContent = 'NOITE • PIR ATIVO';
+        statusEl.className = 'font-bold text-cyan-300';
+      }
+
+      const isLit = mode !== 'day';
+      boardwalkLedMats.forEach(m => (m.emissiveIntensity = isLit ? 1.8 : 0.1));
+      benchLights.forEach(b => {
+        b.mat.emissiveIntensity = isLit ? 2.2 : 0.15;
+        b.light.intensity = isLit ? 1.6 : 0.0;
+      });
+      floatingAerators.forEach(f => {
+        f.ledMat.emissiveIntensity = isLit ? 2.2 : 0.4;
+      });
+    }
+
+    function toggleRainAndHydroCycle() {
+      appState.isRaining = !appState.isRaining;
+      rainPoints.visible = appState.isRaining;
+      roofRunoffMat.opacity = appState.isRaining ? 0.85 : 0.0;
+      rainStreamMat.opacity = appState.isRaining ? 0.72 : 0.0;
+      sprinklers.forEach(s => (s.visible = appState.isRaining));
+
+      const badge = document.getElementById('rain-badge');
+      if (appState.isRaining) {
+        badge.textContent = 'ATIVO';
+        badge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/40';
+        document.getElementById('hud-water-level').textContent = '100% (Captação Ativa)';
+        showToast('Ciclo Hídrico Ativo: Chuva captada pelo pavilhão → Jardim de Chuva → Lago → Rega!');
+      } else {
+        badge.textContent = 'OFF';
+        badge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300';
+        document.getElementById('hud-water-level').textContent = '94% (Fito-Pura)';
+      }
+    }
+
+    function toggleVisitorsSimulation() {
+      appState.visitorsActive = !appState.visitorsActive;
+      visitors.forEach(v => (v.group.visible = appState.visitorsActive));
+
+      const badge = document.getElementById('visitors-badge');
+      const dot = document.getElementById('visitors-dot');
+      if (appState.visitorsActive) {
+        badge.textContent = 'ATIVO';
+        badge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40';
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-ping';
+      } else {
+        badge.textContent = 'PAUSADO';
+        badge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300';
+        dot.className = 'w-2 h-2 rounded-full bg-slate-500';
+      }
+    }
+
+    function toggleXrayView() {
+      appState.isXray = !appState.isXray;
+      undergroundGroup.visible = appState.isXray;
+
+      const btn = document.getElementById('btn-xray');
+      if (appState.isXray) {
+        btn.classList.add('bg-purple-500/30', 'border-purple-400/60', 'text-purple-200');
+        showToast('Vista Raio-X: Tubagens de drenagem pluvial, solo poroso e baterias LiFePO4 visíveis.');
+      } else {
+        btn.classList.remove('bg-purple-500/30', 'border-purple-400/60', 'text-purple-200');
+      }
+    }
+
+    function focusCamera(presetKey) {
+      const preset = CAMERA_PRESETS[presetKey];
+      if (!preset) return;
+
+      targetCamPos.copy(preset.pos);
+      targetLookAt.copy(preset.target);
+      isCameraAnimating = true;
+
+      document.querySelectorAll('.cam-btn').forEach(btn => {
+        if (btn.dataset.cam === presetKey) {
+          btn.className = 'cam-btn active px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500 text-slate-950 transition whitespace-nowrap cursor-pointer';
+        } else {
+          btn.className = 'cam-btn px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/10 transition whitespace-nowrap cursor-pointer';
+        }
+      });
+    }
+
+    /**
+     * ============================================================================
+     * EXPORTAÇÃO PARA WAVEFRONT .OBJ (greeling_parque_3d.obj)
+     * ============================================================================
+     */
+    function exportParkToOBJ() {
+      showToast('A gerar modelo 3D do Parque Sustentável (.OBJ)...');
+
+      setTimeout(() => {
+        try {
+          parkGroup.updateMatrixWorld(true);
+
+          let output = '# GREELING - Parque Sustentavel Inteligente 3D (L7/A11 Smart Energy)\n';
+          output += '# Projeto Cidade Sustentavel - Modelo Arquitetonico e Ecologico para Blender\n\n';
+
+          let vertexOffset = 1;
+          let normalOffset = 1;
+
+          const v = new THREE.Vector3();
+          const n = new THREE.Vector3();
+          const normalMatrix = new THREE.Matrix3();
+
+          parkGroup.traverse((child) => {
+            if (!child.isMesh || !child.geometry) return;
+            if (!child.visible) return;
+
+            const geo = child.geometry;
+            const posAttr = geo.attributes.position;
+            if (!posAttr) return;
+
+            const normAttr = geo.attributes.normal;
+            const indexAttr = geo.index;
+
+            const objName = (child.name || 'Componente_Parque_Greeling').replace(/\s+/g, '_');
+            output += `g ${objName}\n`;
+            output += `o ${objName}\n`;
+
+            normalMatrix.getNormalMatrix(child.matrixWorld);
+
+            for (let i = 0; i < posAttr.count; i++) {
+              v.fromBufferAttribute(posAttr, i).applyMatrix4(child.matrixWorld);
+              output += `v ${v.x.toFixed(5)} ${v.y.toFixed(5)} ${v.z.toFixed(5)}\n`;
+            }
+
+            if (normAttr) {
+              for (let i = 0; i < normAttr.count; i++) {
+                n.fromBufferAttribute(normAttr, i).applyMatrix3(normalMatrix).normalize();
+                output += `vn ${n.x.toFixed(5)} ${n.y.toFixed(5)} ${n.z.toFixed(5)}\n`;
+              }
+            }
+
+            if (indexAttr) {
+              for (let i = 0; i < indexAttr.count; i += 3) {
+                const a = indexAttr.getX(i) + vertexOffset;
+                const b = indexAttr.getX(i + 1) + vertexOffset;
+                const c = indexAttr.getX(i + 2) + vertexOffset;
+                if (normAttr) {
+                  const na = indexAttr.getX(i) + normalOffset;
+                  const nb = indexAttr.getX(i + 1) + normalOffset;
+                  const nc = indexAttr.getX(i + 2) + normalOffset;
+                  output += `f ${a}//${na} ${b}//${nb} ${c}//${nc}\n`;
+                } else {
+                  output += `f ${a} ${b} ${c}\n`;
+                }
+              }
+            } else {
+              for (let i = 0; i < posAttr.count; i += 3) {
+                const a = i + vertexOffset;
+                const b = i + 1 + vertexOffset;
+                const c = i + 2 + vertexOffset;
+                if (normAttr) {
+                  output += `f ${a}//${a} ${b}//${b} ${c}//${c}\n`;
+                } else {
+                  output += `f ${a} ${b} ${c}\n`;
+                }
+              }
+            }
+
+            output += '\n';
+            vertexOffset += posAttr.count;
+            if (normAttr) normalOffset += normAttr.count;
+          });
+
+          const blob = new Blob([output], { type: 'text/plain;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'greeling_parque_3d.obj';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+
+          showToast('greeling_parque_3d.obj descarregado com sucesso!');
+        } catch (err) {
+          showToast('Erro ao exportar ficheiro .OBJ.');
+        }
+      }, 60);
+    }
+
+    let toastTimeout;
+    function showToast(msg) {
+      const box = document.getElementById('toast-box');
+      document.getElementById('toast-message').textContent = msg;
+      box.classList.remove('translate-y-6', 'opacity-0');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        box.classList.add('translate-y-6', 'opacity-0');
+      }, 3600);
+    }
+
+    function bindUIEvents() {
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      document.getElementById('btn-time-day').addEventListener('click', () => setTimeOfDay('day'));
+      document.getElementById('btn-time-dusk').addEventListener('click', () => setTimeOfDay('dusk'));
+      document.getElementById('btn-time-night').addEventListener('click', () => setTimeOfDay('night'));
+
+      document.getElementById('btn-rain').addEventListener('click', toggleRainAndHydroCycle);
+      document.getElementById('btn-visitors').addEventListener('click', toggleVisitorsSimulation);
+      document.getElementById('btn-qr-scan').addEventListener('click', () => selectHotspot('hotel_insetos'));
+      document.getElementById('btn-xray').addEventListener('click', toggleXrayView);
+      document.getElementById('btn-export-obj').addEventListener('click', exportParkToOBJ);
+
+      document.getElementById('btn-toggle-hotspots').addEventListener('click', (e) => {
+        appState.showHotspots = !appState.showHotspots;
+        e.currentTarget.classList.toggle('opacity-50', !appState.showHotspots);
+      });
+
+      document.getElementById('toggle-sim-panel').addEventListener('click', (e) => {
+        const body = document.getElementById('sim-panel-body');
+        const hidden = body.classList.toggle('hidden');
+        e.currentTarget.textContent = hidden ? '+' : '−';
+      });
+
+      document.getElementById('close-info-card').addEventListener('click', () => {
+        document.getElementById('info-card').classList.add('hidden');
+        document.querySelectorAll('.hotspot-pin').forEach(p => p.classList.remove('active'));
+        appState.selectedHotspotId = null;
+      });
+
+      const budgetModal = document.getElementById('budget-modal');
+      document.getElementById('btn-budget').addEventListener('click', () => {
+        budgetModal.classList.remove('hidden');
+        budgetModal.classList.add('flex');
+      });
+      document.getElementById('close-budget-modal').addEventListener('click', () => {
+        budgetModal.classList.add('hidden');
+        budgetModal.classList.remove('flex');
+      });
+      budgetModal.addEventListener('click', (e) => {
+        if (e.target === budgetModal) {
+          budgetModal.classList.add('hidden');
+          budgetModal.classList.remove('flex');
+        }
+      });
+
+      document.querySelectorAll('.cam-btn').forEach(btn => {
+        btn.addEventListener('click', () => focusCamera(btn.dataset.cam));
+      });
+
+      // Raycasting para clicar diretamente na placa QR Code 3D ou nos totens
+      const raycaster = new THREE.Raycaster();
+      const pointer = new THREE.Vector2();
+      let downPos = { x: 0, y: 0 };
+
+      renderer.domElement.addEventListener('pointerdown', (e) => {
+        downPos = { x: e.clientX, y: e.clientY };
+      });
+
+      renderer.domElement.addEventListener('pointerup', (e) => {
+        if (Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 6) return;
+
+        pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+        pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(pointer, camera);
+
+        const hits = raycaster.intersectObjects(parkGroup.children, true);
+        if (hits.length > 0) {
+          const name = hits[0].object.name;
+          if (name.includes('QR_Code') || name.includes('Hotel_de_Insetos')) {
+            selectHotspot('hotel_insetos');
+          } else if (name.includes('Lago')) {
+            selectHotspot('lago');
+          } else if (name.includes('Jardim_de_Chuva')) {
+            selectHotspot('jardim_chuva');
+          }
+        }
+      });
+    }
+
+    /**
+     * ============================================================================
+     * LOOP DE ANIMAÇÃO (Lago, Polinizadores, Visitantes, Sensores PIR e Chuva)
+     * ============================================================================
+     */
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = Math.min(clock.getDelta(), 0.05);
+      const elapsed = clock.getElapsedTime();
+
+      // 1. Ondulação suave da água do Lago Artificial Autossustentável
+      if (lakeWaterGeo && lakeBasePositions) {
+        const pos = lakeWaterGeo.attributes.position.array;
+        for (let i = 0; i < pos.length; i += 3) {
+          const bx = lakeBasePositions[i];
+          const bz = lakeBasePositions[i + 2];
+          pos[i + 1] = Math.sin(bx * 1.4 + elapsed * 1.8) * 0.015 + Math.cos(bz * 1.3 + elapsed * 1.5) * 0.015;
+        }
+        lakeWaterGeo.attributes.position.needsUpdate = true;
+      }
+
+      // 2. Flutuadores Solares de Fito-depuração e Arejamento
+      floatingAerators.forEach(fa => {
+        fa.group.position.y = fa.baseY + Math.sin(elapsed * 2.2 + fa.phase) * 0.018;
+        fa.group.rotation.z = Math.sin(elapsed * 1.6 + fa.phase) * 0.035;
+        const rScale = 1 + ((elapsed * 0.8 + fa.phase) % 1) * 0.8;
+        fa.ripple.scale.set(rScale, rScale, 1);
+        fa.rippleMat.opacity = (1 - ((elapsed * 0.8 + fa.phase) % 1)) * 0.45;
+      });
+
+      // 3. Borboletas e Abelhas animadas no Corredor de Polinizadores
+      butterflies.forEach(bf => {
+        const flap = Math.sin(elapsed * 16 + bf.phase) * 0.95;
+        bf.wingL.rotation.y = flap;
+        bf.wingR.rotation.y = -flap;
+        bf.group.position.x = bf.cx + Math.cos(elapsed * bf.speed + bf.phase) * 0.55;
+        bf.group.position.z = bf.cz + Math.sin(elapsed * bf.speed * 1.2 + bf.phase) * 0.55;
+        bf.group.position.y = bf.baseY + Math.sin(elapsed * 3 + bf.phase) * 0.14;
+        bf.group.rotation.y = -elapsed * bf.speed;
+      });
+
+      bees.forEach(bee => {
+        bee.mesh.position.x = bee.cx + Math.sin(elapsed * 3.5 + bee.phase) * 0.25;
+        bee.mesh.position.z = bee.cz + Math.cos(elapsed * 3.2 + bee.phase) * 0.25;
+        bee.mesh.position.y = 0.65 + Math.sin(elapsed * 6 + bee.phase) * 0.06;
+      });
+
+      // 4. Visitantes 3D a caminhar e ativação dinâmica dos Postes Solares PIR
+      if (appState.visitorsActive && visitorCurve) {
+        visitors.forEach((v, idx) => {
+          v.t += v.dir * v.speed * delta;
+          if (v.t >= 1) {
+            v.t = 1;
+            v.dir = -1;
+          } else if (v.t <= 0) {
+            v.t = 0;
+            v.dir = 1;
+          }
+
+          const pt = visitorCurve.getPointAt(v.t);
+          const tan = visitorCurve.getTangentAt(v.t);
+          v.group.position.copy(pt);
+          v.group.rotation.y = Math.atan2(tan.x * v.dir, tan.z * v.dir);
+
+          const swing = Math.sin(elapsed * 6.5 + idx) * 0.45;
+          v.legL.rotation.x = swing;
+          v.legR.rotation.x = -swing;
+        });
+      }
+
+      // Atualiza brilho dos Postes Solares de Baixo Impacto (15% Eco -> 100% Ativo com presença)
+      const isDark = appState.timeOfDay !== 'day';
+      solarPoles.forEach(pole => {
+        let targetSpot = 0.0;
+        let targetBulb = 0.1;
+
+        if (isDark) {
+          let nearVisitor = false;
+          if (appState.visitorsActive) {
+            for (let i = 0; i < visitors.length; i++) {
+              if (visitors[i].group.position.distanceTo(pole.worldPos) < 4.2) {
+                nearVisitor = true;
+                break;
+              }
+            }
+          }
+          targetSpot = nearVisitor ? 2.6 : 0.45; // 100% Ativo vs 15% Modo Eco
+          targetBulb = nearVisitor ? 2.4 : 0.45;
+        }
+
+        pole.spot.intensity += (targetSpot - pole.spot.intensity) * 0.12;
+        pole.bulbMat.emissiveIntensity += (targetBulb - pole.bulbMat.emissiveIntensity) * 0.12;
+      });
+
+      // 5. Animação de Chuva & Aspersores de Rega
+      if (appState.isRaining && rainPoints) {
+        const pos = rainPoints.geometry.attributes.position.array;
+        for (let i = 0; i < pos.length; i += 6) {
+          pos[i + 1] -= 14 * delta;
+          pos[i + 4] -= 14 * delta;
+          if (pos[i + 1] < 0.05) {
+            const ny = 10 + Math.random() * 2;
+            pos[i + 1] = ny;
+            pos[i + 4] = ny - 0.38;
+          }
+        }
+        rainPoints.geometry.attributes.position.needsUpdate = true;
+
+        sprinklers.forEach((sp, i) => {
+          const pulse = 0.85 + Math.sin(elapsed * 8 + i) * 0.22;
+          sp.scale.set(pulse, 1, pulse);
+        });
+      }
+
+      // 6. Transição suave da Vista Raio-X
+      const targetOp = appState.isXray ? 0.25 : 1.0;
+      xrayMaterials.forEach(m => {
+        m.opacity += (targetOp - m.opacity) * 0.12;
+      });
+
+      // 7. Interpolação suave de câmara
+      if (isCameraAnimating) {
+        camera.position.lerp(targetCamPos, 0.075);
+        controls.target.lerp(targetLookAt, 0.075);
+        if (camera.position.distanceTo(targetCamPos) < 0.04 && controls.target.distanceTo(targetLookAt) < 0.04) {
+          isCameraAnimating = false;
+        }
+      }
+
+      controls.update();
+      updateHotspotPositions();
+      renderer.render(scene, camera);
+    }
+
+    window.onload = function () {
+      initScene();
+    };
+  </script>
+</body>
+</html>
